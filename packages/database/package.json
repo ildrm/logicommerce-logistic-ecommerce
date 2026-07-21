@@ -1,0 +1,36 @@
+{
+  "name": "@logicommerce/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src prisma.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --dir src",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-mariadb": "7.9.0",
+    "@prisma/client": "7.9.0",
+    "argon2": "0.44.0",
+    "dotenv": "17.2.3",
+    "mariadb": "3.4.5"
+  },
+  "devDependencies": {
+    "@logicommerce/tsconfig": "workspace:*",
+    "prisma": "7.9.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

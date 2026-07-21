@@ -1,0 +1,28 @@
+services:
+  mysql:
+    deploy:
+      resources:
+        limits: { memory: 2G }
+  redis:
+    deploy:
+      resources:
+        limits: { memory: 768M }
+  api:
+    environment:
+      NODE_ENV: production
+      COOKIE_SECURE: 'true'
+    deploy:
+      resources:
+        limits: { memory: 768M }
+  worker:
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits: { memory: 1G }
+  web:
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits: { memory: 512M }

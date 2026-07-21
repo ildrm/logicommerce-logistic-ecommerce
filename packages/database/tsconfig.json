@@ -1,0 +1,5 @@
+{
+  "extends": "@logicommerce/tsconfig/base.json",
+  "compilerOptions": { "declaration": true, "outDir": "dist", "rootDir": "." },
+  "include": ["src/**/*.ts", "prisma/**/*.ts", "prisma.config.ts", "generated/**/*.ts"]
+}

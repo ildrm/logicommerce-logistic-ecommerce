@@ -1,0 +1,71 @@
+:root {
+  color-scheme: light;
+  --lc-color-canvas: #f4f0e8;
+  --lc-color-surface: #fffdf8;
+  --lc-color-ink: #142224;
+  --lc-color-muted: #667371;
+  --lc-color-border: #d8d0c1;
+  --lc-color-primary: #0d7068;
+  --lc-color-primary-contrast: #ffffff;
+  --lc-color-warning: #c5682f;
+  --lc-color-danger: #ad3f39;
+  --lc-focus-ring: 0 0 0 3px rgba(13, 112, 104, 0.35);
+  --lc-radius-sm: 0.25rem;
+  --lc-radius-md: 0.5rem;
+  --lc-shadow-raised: 0 0.75rem 2rem rgba(20, 34, 36, 0.08);
+  --lc-motion-fast: 140ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --lc-color-canvas: #11191a;
+    --lc-color-surface: #182324;
+    --lc-color-ink: #f3efe7;
+    --lc-color-muted: #a8b3b0;
+    --lc-color-border: #344243;
+    --lc-color-primary: #63c8bc;
+    --lc-color-primary-contrast: #102122;
+  }
+}
+
+.lc-button {
+  min-block-size: 2.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--lc-radius-sm);
+  padding-inline: 1rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color var(--lc-motion-fast),
+    border-color var(--lc-motion-fast);
+}
+
+.lc-button:focus-visible {
+  outline: none;
+  box-shadow: var(--lc-focus-ring);
+}
+.lc-button--primary {
+  background: var(--lc-color-primary);
+  color: var(--lc-color-primary-contrast);
+}
+.lc-button--secondary {
+  background: transparent;
+  color: var(--lc-color-ink);
+  border-color: var(--lc-color-border);
+}
+.lc-button--danger {
+  background: var(--lc-color-danger);
+  color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
