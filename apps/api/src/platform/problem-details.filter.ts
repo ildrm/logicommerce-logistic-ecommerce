@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import { Catch, HttpException, HttpStatus } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -11,7 +12,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp();
     const request = context.getRequest<FastifyRequest>();
-    const response = context.getResponse<FastifyReply>();
+    const response = context.getResponse<FastifyReply | ServerResponse>();
     const status =
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     const requestId = request.headers['x-request-id']?.toString() ?? 'unknown';
@@ -27,7 +28,14 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       errors: [],
     };
     if (status >= 500) this.logger.error({ err: exception, requestId }, 'Unhandled API error');
-    void response.status(status).send(problem);
+    if ('status' in response && typeof response.status === 'function') {
+      void response.status(status).send(problem);
+      return;
+    }
+    const rawResponse = response as ServerResponse;
+    rawResponse.statusCode = status;
+    rawResponse.setHeader('content-type', 'application/problem+json; charset=utf-8');
+    rawResponse.end(JSON.stringify(problem));
   }
 
   private message(exception: unknown): string {

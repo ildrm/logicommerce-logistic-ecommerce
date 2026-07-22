@@ -14,6 +14,9 @@ x-app-environment: &app-environment
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:3000}
   LOG_LEVEL: ${LOG_LEVEL:-info}
   COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  AUTH_LOGIN_RATE_LIMIT_MAX: ${AUTH_LOGIN_RATE_LIMIT_MAX:-10}
+  AUTH_REFRESH_RATE_LIMIT_MAX: ${AUTH_REFRESH_RATE_LIMIT_MAX:-30}
+  AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
 
 x-app-dependencies: &app-dependencies
   mysql:

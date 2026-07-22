@@ -18,5 +18,7 @@ describe('parseEnvironment', () => {
 
   it('parses valid configuration', () => {
     expect(parseEnvironment(valid).API_PORT).toBe(3001);
+    expect(parseEnvironment(valid).JWT_ACCESS_TTL_SECONDS).toBe(900);
+    expect(parseEnvironment(valid).AUTH_LOGIN_RATE_LIMIT_MAX).toBe(10);
   });
 });

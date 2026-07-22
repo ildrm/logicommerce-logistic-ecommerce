@@ -8,6 +8,34 @@ Changelog structure and will adopt semantic versioning when releases begin.
 ### Added
 
 - Continuation guide, documentation map, phase roadmap, and verification record.
+- Phase 1 local authentication API with Argon2 password verification,
+  short-lived access tokens, opaque rotating refresh tokens, reuse detection,
+  authenticated actor context, session revocation, and auth audit events.
+- Authentication/session API contracts and ADR 0007 documenting the initial
+  same-origin browser session model.
+- Idempotent second-tenant isolation fixture and repeatable live authentication
+  integration command.
+- Verified-domain tenant resolution with a development-only tenant-header
+  bridge, Redis-backed login/refresh limits, and fail-closed Redis behavior.
+- Deny-by-default permission decorator/guard, protected tenant configuration,
+  denied-action audit events, and an unprivileged viewer fixture.
+- Fastify-compatible raw middleware/error-filter handling and tenant-free
+  infrastructure health/Swagger routing.
+
+### Validated
+
+- Authentication unit tests, full lint/typecheck/test gates, production build,
+  formatting, whitespace checks, and development/production Compose config.
+- Live MySQL authentication flows, concurrent refresh reuse, persisted token
+  and audit invariants, trusted-host resolution, admin allow/viewer deny,
+  Redis rate limiting, cross-tenant token rejection, healthy Docker probes, and
+  desktop/mobile Playwright regression tests.
+
+### Known limitations
+
+- The live integration command is not yet wired into an isolated CI database
+  lifecycle. Role administration, recovery/verification, MFA, identity-provider
+  adapters, and browser authentication UI remain Phase 1 work.
 
 ## 0.1.0-foundation — 2026-07-21
 

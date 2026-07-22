@@ -29,3 +29,27 @@ export type TenantSummary = {
   readonly defaultLocale: string;
   readonly defaultCurrency: string;
 };
+
+export type AuthenticatedUser = {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly email: string;
+  readonly displayName: string;
+  readonly roles: readonly string[];
+  readonly permissions: readonly string[];
+};
+
+export type AuthSession = {
+  readonly id: string;
+  readonly createdAt: string;
+  readonly lastSeenAt: string;
+  readonly expiresAt: string;
+  readonly current: boolean;
+};
+
+export type AuthenticationResult = {
+  readonly accessToken: string;
+  readonly tokenType: 'Bearer';
+  readonly expiresIn: number;
+  readonly user: AuthenticatedUser;
+};

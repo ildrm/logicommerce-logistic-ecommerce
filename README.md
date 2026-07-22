@@ -30,10 +30,13 @@ Local endpoints:
 The reverse proxy is the normal application entry point. MySQL, Redis, and
 MinIO API ports are exposed only in the development override.
 
-The idempotent seed creates tenant `platform-demo` and local-only account
-`admin@demo.logicommerce.local` / `ChangeMe-Local-Only-2026`. Authentication
-endpoints and UI are still part of Phase 1, so this account currently supports
-database and authorization development rather than an interactive sign-in.
+The idempotent seed creates tenant `platform-demo`, local-only admin
+`admin@demo.logicommerce.local`, read-only viewer
+`viewer@demo.logicommerce.local`, and an `isolation-test` tenant without a login
+identity. Both demo users use `ChangeMe-Local-Only-2026`. The Phase 1 API
+supports local login, token rotation, session revocation, trusted-host tenant
+resolution, Redis rate limiting, and permission enforcement. The accessible
+sign-in and session-management UI is still pending.
 
 ## Local development
 
@@ -56,10 +59,9 @@ See the [documentation map](docs/README.md),
 
 ## Continue implementation
 
-The next deliverable is the Phase 1 local authentication vertical slice:
-password login, access and rotating refresh tokens, session revocation,
-authenticated tenant/actor context, permission guards, audit events, and
-two-tenant isolation tests. The exact order and guardrails are documented in
+The next deliverable continues the Phase 1 security boundary with isolated CI
+database/audit assertions, role and user administration, password recovery and
+verification, MFA, and accessible sign-in/session-management UI. The exact order and guardrails are documented in
 the [continuation guide](docs/development/continuation-guide.md#exact-next-implementation-slice-finish-phase-1).
 
 Do not start Phase 2 until Phase 1 satisfies the exit criteria in the

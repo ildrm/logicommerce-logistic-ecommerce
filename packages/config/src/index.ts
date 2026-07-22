@@ -9,9 +9,15 @@ export const environmentSchema = z.object({
   REDIS_URL: z.string().startsWith('redis://'),
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_PEPPER: z.string().min(32),
+  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
   CORS_ORIGINS: z.string().min(1),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   COOKIE_SECURE: booleanText.default(false),
+  COOKIE_DOMAIN: z.string().min(1).optional(),
+  AUTH_LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  AUTH_REFRESH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(30),
+  AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

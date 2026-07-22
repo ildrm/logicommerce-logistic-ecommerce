@@ -4,7 +4,7 @@ This is the canonical handoff for the next developer or coding agent. It
 records what was built, what was verified, which constraints are intentional,
 and where implementation must resume.
 
-Last updated: **2026-07-21**.
+Last updated: **2026-07-22**.
 
 ## Current project state
 
@@ -61,11 +61,15 @@ curl -fsS http://localhost:8080/api/v1/health/ready
 curl -fsS \
   -H 'x-tenant-id: 00000000-0000-4000-8000-000000000001' \
   http://localhost:8080/api/v1/tenants/current
+pnpm test:auth:live
 ```
 
 The second command should return the `platform-demo` tenant. In development,
 the middleware also defaults to this demo tenant when the header is omitted.
 Production must never infer a tenant this way.
+The live authentication command creates only local test sessions, revokes all
+of them before exit, and verifies login, refresh reuse (including a concurrent
+race), tenant mismatch, session revocation, logout, and logout-all.
 
 ### 5. Run the repository gates
 
@@ -109,10 +113,11 @@ The seed is idempotent and currently creates:
 - Local-only password: `ChangeMe-Local-Only-2026`
 - Role: `tenant-admin`
 - Permission: `tenant.configure`
+- Isolation tenant ID: `00000000-0000-4000-8000-000000000009`
+- Isolation tenant slug: `isolation-test` (no login identity)
 
-The password is Argon2-hashed in the database. Interactive login is not yet
-implemented, so the account is currently for identity and authorization
-development, not a usable application login.
+The password is Argon2-hashed in the database. Local API login is implemented;
+the browser sign-in and session-management UI is not.
 
 ## What has been implemented
 
@@ -208,30 +213,55 @@ Preserve these unless an accepted ADR changes them:
 
 ## Exact next implementation slice: finish Phase 1
 
-Start with a narrow, fully tested local authentication flow. Do not begin Phase
-2 until the Phase 1 exit criteria in the roadmap are met.
+The narrow local authentication backend is implemented and unit tested. It
+includes password verification, access and rotating refresh tokens, refresh
+reuse detection, authenticated actor context, session revocation, and auth
+audit events. It is live-tested against MySQL through
+`pnpm test:auth:live`, including simultaneous refresh reuse and a second-tenant
+token mismatch. Do not begin Phase 2 until the Phase 1 exit criteria in the
+roadmap are met.
 
-Recommended order:
+Completed in the 2026-07-22 slice:
 
-1. Add authentication application services and repositories without exposing
-   Prisma to controllers.
-2. Implement email/password login using the seeded Argon2 identity.
-3. Issue a short-lived access token and a rotated, hashed refresh token bound to
-   `UserSession`.
-4. Add refresh-token reuse detection and revoke the token family on reuse.
-5. Add logout-one-session and logout-all-sessions operations.
-6. Resolve tenant and actor context from the authenticated principal; remove
-   reliance on the development tenant header for protected production paths.
-7. Add permission guards with deny-by-default behavior and non-enumerating 404
-   responses for cross-tenant resource IDs.
-8. Write audit events for login success/failure, refresh reuse, logout, role
-   changes, and denied privileged actions.
-9. Add rate limits for authentication endpoints.
-10. Add API integration tests, two-tenant isolation tests, and Playwright login
-    and logout journeys.
-11. Add accessible sign-in, session-management, loading, empty, and error UI.
-12. Then implement password reset, email verification, TOTP MFA, recovery
-    codes, and pluggable OIDC/social providers.
+1. Authentication application services and Prisma-isolated repositories.
+2. Seeded Argon2 email/password login with generic credential failures.
+3. Short-lived tenant/session-bound access tokens and opaque, hashed refresh
+   tokens in hardened browser cookies.
+4. Atomic refresh rotation, consumed-token reuse detection, and token-family
+   and session revocation.
+5. Current-user, session listing, revoke-one, logout, and logout-all endpoints.
+6. Authenticated actor context plus active-session validation on protected auth
+   endpoints.
+7. Authentication audit events for login success/failure, refresh reuse,
+   logout, and session revocation.
+8. Idempotent second-tenant seed fixture and a repeatable live authentication
+   integration command covering login, rotation/reuse, concurrent refresh,
+   tenant mismatch, session revocation, logout, and logout-all.
+9. Redis-backed, hashed-key login and refresh rate limits with configurable
+   windows and fail-closed behavior when Redis is unavailable.
+10. Verified hostname/domain tenant resolution; production ignores an
+    untrusted tenant header while local development retains an explicit bridge.
+11. Reusable deny-by-default permission declarations and guards, with
+    `tenants/current` protected by `tenant.configure`.
+12. A read-only viewer fixture plus live admin-allow/viewer-deny coverage and a
+    persisted `auth.permission.denied` audit event.
+13. Raw Fastify middleware/error-filter compatibility and tenant-free health and
+    Swagger infrastructure paths, including the exact Docker health probe.
+
+Continue in this order:
+
+1. Run the live authentication integration command in CI with an isolated
+   database, and add direct automated assertions for audit persistence and
+   non-enumerating cross-tenant resource lookups.
+2. Add role, permission, grant, and user-role administration APIs with
+   deny-by-default permissions, tenant isolation, and role-change audits.
+3. Add Playwright login/logout coverage and accessible sign-in,
+   session-management, loading, empty, and error UI.
+4. Implement password reset and email verification using single-use, hashed,
+   expiring tokens and the mock-mail adapter.
+5. Implement TOTP MFA, recovery codes, MFA-aware sessions, and pluggable
+   OIDC/social provider boundaries.
+6. Add auth/tenant metrics and complete the Phase 1 exit-scenario evidence.
 
 ADRs still required as their decisions become active: Redis queue semantics,
 object-storage upload/security model, full authentication model, tenant
