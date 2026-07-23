@@ -447,6 +447,26 @@ See [static-analysis.md](../security/static-analysis.md).
 The analyzer's low estimated coverage remains a valid warning. It is not a
 measured coverage report, and broad domain coverage remains Phase 11 work.
 
+## 2026-07-23 operational analytics and UI verification
+
+- Built the production API image with the tenant-scoped analytics aggregation
+  endpoint and built the production Next.js image with `/dashboard`.
+- Activated both images in the Compose stack; API, web, reverse proxy, MySQL,
+  Redis, worker, MinIO, and Mailpit remained healthy.
+- Ran focused Vitest coverage for API and web sources: 7 files, 18 tests, all
+  passed.
+- Ran the updated product-surface regression with an installed headless Chrome:
+  10/10 tests passed serially across desktop Chromium and Pixel 7.
+- Ran the final cross-domain dashboard scenario separately at desktop and
+  mobile sizes: 2/2 passed.
+- Browser coverage authenticated as the local admin and verified live analytics,
+  reporting-window URL state, accessible chart/table evidence, dashboard
+  responsive order, storefront browse/search/empty states, platform readiness,
+  identity controls, shared navigation, and absence of roadmap terminology.
+- The final runs reported no page errors or console errors. Visual comparison
+  against the accepted dashboard concept corrected an SVG series-fill defect
+  before the passing regression.
+
 ## How to add a new verification entry
 
 Record the date, commit SHA, environment, exact commands, results, relevant

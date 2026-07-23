@@ -30,6 +30,30 @@ production-provider selection and authorized release evidence: CI security/SBOM,
 measured domain-critical coverage, external penetration testing, and an actual
 provider backup/restore drill.
 
+## Operational analytics and product-surface update
+
+- Added a tenant-scoped `GET /api/v1/analytics/overview?days=7|14|30` endpoint
+  protected by `operability.read`.
+- Added `/dashboard` as the authenticated command center for system health,
+  order/fulfillment trends, prioritized exceptions, handoff health, inventory,
+  finance, SLOs, optimization, governed activity, and cross-domain workload.
+- Cross-domain activity covers identity, catalog, checkout, B2C, fulfillment,
+  C2C, B2B, Shop APIs, returns, 3PL/4PL, optimization, and reliability even
+  when no exception is active.
+- The dashboard preserves the last good snapshot during refresh failure,
+  distinguishes live/partial/stale states, polls every 60 seconds, exposes
+  exact chart values as an accessible table, and uses URL-backed time windows.
+- Reworked `/`, `/platform`, `/storefront`, `/account`, and `/operations` into
+  a shared product shell with clear page responsibilities and responsive
+  navigation.
+- Removed development-phase and implementation-status terminology from all
+  customer/operator-facing pages. A legacy SLO test fixture was renamed from
+  phase terminology to `API availability`.
+- Production API and web images compiled successfully; the focused unit run
+  passed 18/18 tests; the updated browser regression passed 10/10 tests across
+  desktop Chromium and Pixel 7; the final cross-domain dashboard check passed
+  2/2 at desktop and mobile sizes with no browser console or page errors.
+
 ## Phase 0 verification summary
 
 - Lint: passed, 12 successful tasks.

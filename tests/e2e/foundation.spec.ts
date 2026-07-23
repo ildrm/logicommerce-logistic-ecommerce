@@ -1,11 +1,23 @@
 import { expect, test } from '@playwright/test';
 
-test('foundation identifies implemented boundaries', async ({ page }) => {
+async function signIn(page: import('@playwright/test').Page) {
+  await page.goto('/account');
+  await page.getByLabel('Email', { exact: true }).first().fill('admin@demo.logicommerce.local');
+  await page.getByLabel('Password', { exact: true }).fill('ChangeMe-Local-Only-2026');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Open dashboard' })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.sessionStorage.getItem('logicommerce_access')))
+    .not.toBe('');
+}
+
+test('home and platform expose product and runtime state', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /one network/i })).toBeVisible();
-  await page.getByRole('link', { name: 'View platform status' }).click();
-  await expect(page.getByRole('heading', { name: 'Platform status' })).toBeVisible();
-  await expect(page.getByText('Outbox publication process')).toBeVisible();
+  await page.getByRole('link', { name: 'Platform' }).click();
+  await expect(page.getByRole('heading', { name: 'Platform health' })).toBeVisible();
+  await expect(page.getByText('Transactional outbox publication and retries')).toBeVisible();
+  await expect(page.getByRole('status')).toContainText(/API ready|Readiness unavailable/u);
 });
 
 test('tenant administrator can sign in and reach identity controls', async ({ page }, testInfo) => {
@@ -13,11 +25,11 @@ test('tenant administrator can sign in and reach identity controls', async ({ pa
   await expect(page.getByRole('heading', { name: 'Secure sign in.' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Reset access' })).toBeVisible();
 
-  await page.getByLabel('Email').first().fill('admin@demo.logicommerce.local');
-  await page.getByLabel('Password').fill('ChangeMe-Local-Only-2026');
+  await page.getByLabel('Email', { exact: true }).first().fill('admin@demo.logicommerce.local');
+  await page.getByLabel('Password', { exact: true }).fill('ChangeMe-Local-Only-2026');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-  await expect(page.getByRole('heading', { name: /Welcome,/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Identity & access' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Active sessions' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Multi-factor authentication' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Tenant roles' })).toBeVisible();
@@ -51,16 +63,48 @@ test('storefront supports browse, search, and empty states', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'No products found.' })).toBeVisible();
 });
 
-test('operations surface exposes the Phase 4-11 execution rails', async ({ page }) => {
+test('operations surface exposes product workflows without roadmap metadata', async ({ page }) => {
   await page.goto('/operations');
-  await expect(page.getByRole('heading', { name: 'Execution, with receipts.' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Fulfillment control' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Control every handoff.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Fulfillment & delivery' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Peer marketplace' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Business procurement' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Partner integrations' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Returns and finance' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '3PL and 4PL control' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Partner ecosystem' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Returns & financial control' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Network orchestration' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Governed optimization' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Production readiness' })).toBeVisible();
-  await expect(page.getByText('OPERATIONAL')).toHaveCount(8);
+  await expect(page.getByRole('heading', { name: 'Reliability & governance' })).toBeVisible();
+  await expect(page.getByText(/phase \d|implementation evidence|current release/iu)).toHaveCount(0);
+});
+
+test('dashboard summarizes live tenant processes and remains accessible', async ({ page }, testInfo) => {
+  const browserErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => browserErrors.push(error.message));
+
+  await signIn(page);
+  await page.getByRole('link', { name: 'Open dashboard' }).click();
+  await expect(page).toHaveURL(/\/dashboard/u);
+  await expect(page.getByRole('heading', { name: 'Operations overview' })).toBeVisible();
+  await expect(page.getByText('System health', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Order and fulfillment volume' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Exceptions requiring attention' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Process health' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Cross-domain activity' })).toBeVisible();
+  for (const domain of ['Identity', 'Catalog', 'Commerce', 'C2C', 'B2B', 'Shop APIs', '3PL / 4PL', 'Optimization', 'Reliability']) {
+    await expect(page.getByText(domain, { exact: true }).first()).toBeVisible();
+  }
+  await expect(page.getByRole('heading', { name: 'Inventory position' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Financial control' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Service objectives' })).toBeVisible();
+  await expect(page.getByText(/phase \d|implementation evidence|current release/iu)).toHaveCount(0);
+
+  await page.getByRole('button', { name: '7 days' }).click();
+  await expect(page).toHaveURL(/days=7/u);
+  await expect(page.getByRole('button', { name: '7 days' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Refresh' })).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath('dashboard.png'), fullPage: true });
+  expect(browserErrors).toEqual([]);
 });

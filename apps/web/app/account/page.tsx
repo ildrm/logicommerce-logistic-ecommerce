@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { AppHeader } from '../components/app-header';
 
 type User = { id: string; email: string; displayName: string; permissions: string[] };
 type Session = { id: string; lastSeenAt: string; expiresAt: string; current: boolean };
@@ -226,14 +227,16 @@ export default function AccountPage() {
 
   return (
     <main id="main" className="account-page">
-      <nav>
-        <a href="/">← LogiCommerce</a>
-      </nav>
-      <p className="eyebrow">Tenant identity center</p>
-      <h1>{user ? `Welcome, ${user.displayName}` : 'Secure sign in.'}</h1>
-      <p className="lede">
-        Manage strong authentication, active devices, and tenant authorization.
-      </p>
+      <AppHeader active="account" />
+      <div className="page-heading account-heading">
+        <div>
+          <h1>{user ? 'Identity & access' : 'Secure sign in.'}</h1>
+          <p className="page-subtitle">
+            {user ? `Signed in as ${user.displayName}. Manage authentication, devices, users, and authorization.` : 'Access your tenant workspace and protected operational tools.'}
+          </p>
+        </div>
+        {user ? <a className="button button--primary" href="/dashboard">Open dashboard</a> : null}
+      </div>
       {message ? (
         <p className="notice" role="status">
           {message}

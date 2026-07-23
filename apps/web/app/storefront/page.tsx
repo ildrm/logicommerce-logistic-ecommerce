@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { AppHeader } from '../components/app-header';
 
 type Store = { id: string; key: string; name: string; defaultCurrency: string };
 type Offer = {
@@ -199,24 +200,15 @@ export default function StorefrontPage() {
 
   return (
     <main id="main" className="shop-page">
-      <header className="shop-header">
-        <a className="brand" href="/">
-          <span className="brand-mark" aria-hidden="true">
-            L
-          </span>
-          <span>LogiCommerce</span>
-        </a>
-        <nav>
-          <a href="/account">Account</a>
+      <AppHeader active="storefront" />
+
+      <section className="shop-intro">
+        <div className="storefront-title">
+          <div><h1>Built for the field.</h1><p>Verified offers with visible availability and accountable delivery.</p></div>
           <button className="cart-button" onClick={() => void quoteCart()}>
             Cart · {cart?.lines.reduce((sum, line) => sum + line.quantity, 0) ?? 0}
           </button>
-        </nav>
-      </header>
-
-      <section className="shop-intro">
-        <p className="eyebrow">Verified offers · accountable delivery</p>
-        <h1>Built for the field.</h1>
+        </div>
         <div className="shop-controls">
           <label>
             <span>Store</span>

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AnalyticsModule } from './analytics/analytics.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { B2BModule } from './b2b/b2b.module.js';
 import { C2CModule } from './c2c/c2c.module.js';
@@ -18,6 +19,7 @@ import { TenancyModule } from './tenancy/tenancy.module.js';
 @Module({
   imports: [
     DatabaseModule,
+    AnalyticsModule,
     HealthModule,
     TenancyModule,
     AuthModule,

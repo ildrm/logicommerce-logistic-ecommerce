@@ -466,7 +466,7 @@ async function phase11(token, suffix) {
       method: 'POST',
       body: JSON.stringify({
         key: `phase11-${suffix}`,
-        name: 'Phase 11 availability evidence',
+        name: 'API availability',
         target: 0.9995,
         windowDays: 30,
         indicatorQuery: 'successful_requests / total_requests',
