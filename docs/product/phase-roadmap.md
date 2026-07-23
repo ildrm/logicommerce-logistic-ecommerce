@@ -15,21 +15,29 @@ The final journeys are preserved separately in
 Provide secure tenant resolution, authentication, sessions, MFA, and
 deny-by-default authorization for every later domain.
 
-### Remaining capabilities
+### Implemented capabilities
 
-- Password login, email verification, reset, and passwordless email.
-- Rotating refresh tokens, reuse detection, session/device management.
-- TOTP MFA and recovery codes.
-- Pluggable OIDC and social identity providers.
-- Roles, permissions, resource policies, and administrative assignment UI.
-- Trusted host/domain tenant resolution and machine credentials.
-- Two-tenant isolation and security-audit tests.
+- Password login plus non-enumerating email verification, reset, and
+  passwordless-email workflows using hashed, expiring, single-use tokens.
+- Rotating refresh tokens, reuse detection, and session/device management.
+- TOTP MFA with encrypted secrets, replay prevention, and single-use recovery
+  codes.
+- A provider-neutral OIDC/social adapter port and registry. Concrete external
+  providers remain deployment integrations because no vendor is selected.
+- Tenant-scoped roles, permissions, grants, user-role assignment APIs, and an
+  accessible responsive administration UI.
+- Trusted host/domain tenant resolution and hashed, scoped, revocable machine
+  credentials.
+- Two-tenant non-enumeration, denied-action audit, live security, and
+  desktop/mobile browser tests.
 
 ### Exit scenario
 
 A tenant administrator signs in, completes MFA, manages a role, sees active
 sessions, revokes one, and cannot access a second tenant's resource or infer its
-existence. Security and audit records are produced.
+existence. Security and audit records are produced. This scenario passed on
+2026-07-23; see the
+[verification record](../testing/verification-record.md#phase-1-completion--2026-07-23).
 
 ## Phase 2 — Stores, catalog, offers, and storefront
 
@@ -38,7 +46,7 @@ existence. Security and audit records are produced.
 Create the sellable-product model shared by marketplace, dropshipping, C2C,
 and B2B channels.
 
-### Capabilities
+### Implemented capabilities
 
 - Store/channel configuration, domains, locale, currency, and branding.
 - Categories, attributes, products, variants, media, translations, and SEO.
@@ -51,7 +59,8 @@ and B2B channels.
 
 A supplier submits product data, a merchant approves it, a seller publishes an
 offer, and a customer finds the product through the storefront without any
-cross-tenant leakage.
+cross-tenant leakage. This scenario passed on 2026-07-23; see the
+[verification record](../testing/verification-record.md#phase-2-and-3-completion--2026-07-23).
 
 ## Phase 3 — Inventory, cart, checkout, and B2C orders
 
@@ -59,7 +68,7 @@ cross-tenant leakage.
 
 Complete the first transactional commerce journey with concurrency-safe stock.
 
-### Capabilities
+### Implemented capabilities
 
 - Inventory sources, feeds, balances, ledger entries, reservations, expiry,
   release, and reconciliation.
@@ -74,6 +83,11 @@ Complete the first transactional commerce journey with concurrency-safe stock.
 - Complete the B2C dropshipping scenario in the original blueprint.
 - With one unit available and concurrent checkouts, exactly one reservation
   succeeds and the ledger never becomes negative.
+
+The Phase 3 boundary through dropship purchase-order acceptance passed on
+2026-07-23. Shipment, tracking, and settlement steps remain owned by Phases 4
+and 8; see the
+[verification record](../testing/verification-record.md#phase-2-and-3-completion--2026-07-23).
 
 ## Phase 4 — Fulfillment, WMS, TMS, and tracking
 

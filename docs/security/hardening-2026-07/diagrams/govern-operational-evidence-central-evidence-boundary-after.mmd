@@ -1,0 +1,7 @@
+flowchart LR
+  O[Operator] --> G[Auth and permission guard]
+  G --> D[Domain transitions]
+  G --> E[Operational evidence API]
+  D --> A[(Immutable audit and ledgers)]
+  E --> P[(Tenant-scoped evidence)]
+  P --> T[Durable telemetry and exercise export]

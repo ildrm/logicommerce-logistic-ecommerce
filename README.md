@@ -4,8 +4,9 @@ LogiCommerce is a multi-tenant commerce and logistics platform for C2C, B2C,
 B2B, dropshipping, and 1PL–5PL operating models. The repository starts as a
 modular monolith with separately runnable web, API, and worker processes.
 
-> **Current state:** Phase 0 is tested and Phase 1 is in progress. This is a
-> working platform foundation, not a completed commerce or 5PL product. New
+> **Current state:** Phases 0–7 are tested. This is a working
+> identity-secured commerce and network-operations core, not a completed
+> returns, finance, 3PL–5PL, or hardening program. New
 > contributors should begin with the
 > [continuation guide](docs/development/continuation-guide.md).
 
@@ -34,9 +35,11 @@ The idempotent seed creates tenant `platform-demo`, local-only admin
 `admin@demo.logicommerce.local`, read-only viewer
 `viewer@demo.logicommerce.local`, and an `isolation-test` tenant without a login
 identity. Both demo users use `ChangeMe-Local-Only-2026`. The Phase 1 API
-supports local login, token rotation, session revocation, trusted-host tenant
-resolution, Redis rate limiting, and permission enforcement. The accessible
-sign-in and session-management UI is still pending.
+supports local and passwordless login, email verification/reset, token
+rotation, session revocation, TOTP/recovery MFA, trusted-host tenant resolution,
+Redis rate limiting, deny-by-default permissions, tenant role/user
+administration, and scoped machine credentials. The responsive account UI is
+available at `http://localhost:8080/account`.
 
 ## Local development
 
@@ -50,6 +53,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm test:network:live
 ```
 
 See the [documentation map](docs/README.md),
@@ -59,13 +63,10 @@ See the [documentation map](docs/README.md),
 
 ## Continue implementation
 
-The next deliverable continues the Phase 1 security boundary with isolated CI
-database/audit assertions, role and user administration, password recovery and
-verification, MFA, and accessible sign-in/session-management UI. The exact order and guardrails are documented in
-the [continuation guide](docs/development/continuation-guide.md#exact-next-implementation-slice-finish-phase-1).
-
-Do not start Phase 2 until Phase 1 satisfies the exit criteria in the
-[phase roadmap](docs/product/phase-roadmap.md#phase-1--tenancy-identity-and-authorization).
+Phases 0–11 have repository-level automated evidence. Preserve the tested
+tenancy, ledger, idempotency, approval, and webhook invariants while selecting
+production providers and obtaining authorized CI security/SBOM, measured
+coverage, penetration-test, and provider restore evidence.
 
 ## Repository layout
 

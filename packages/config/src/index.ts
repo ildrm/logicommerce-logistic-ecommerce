@@ -9,6 +9,7 @@ export const environmentSchema = z.object({
   REDIS_URL: z.string().startsWith('redis://'),
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_PEPPER: z.string().min(32),
+  FIELD_ENCRYPTION_KEY: z.string().min(32),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
   CORS_ORIGINS: z.string().min(1),

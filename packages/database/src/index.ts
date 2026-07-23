@@ -28,6 +28,9 @@ export function createDatabaseClient() {
     password: process.env.DATABASE_PASSWORD ?? '',
     database: process.env.DATABASE_NAME ?? 'logicommerce',
     connectionLimit: 10,
+    allowPublicKeyRetrieval:
+      process.env.DATABASE_ALLOW_PUBLIC_KEY_RETRIEVAL === 'true' ||
+      process.env.NODE_ENV !== 'production',
   });
   return new PrismaClient({ adapter });
 }

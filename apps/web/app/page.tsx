@@ -15,7 +15,7 @@ export default function HomePage() {
           </span>
           <span>LogiCommerce</span>
         </a>
-        <span className="phase">PLATFORM FOUNDATION · PHASE 0/1</span>
+        <span className="phase">NETWORK OPERATIONS · PHASE 4–7</span>
       </header>
 
       <section className="hero" aria-labelledby="page-title">
@@ -30,8 +30,17 @@ export default function HomePage() {
           around explicit responsibility, auditable decisions, and safe execution.
         </p>
         <div className="actions">
+          <a className="primary-action" href="/storefront">
+            Shop catalog
+          </a>
+          <a className="primary-action" href="/account">
+            Sign in
+          </a>
           <a className="primary-action" href="/platform">
             View platform status
+          </a>
+          <a className="primary-action" href="/operations">
+            Open operations
           </a>
           <a className="secondary-action" href="http://localhost:8080/api/docs">
             Explore API

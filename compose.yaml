@@ -11,6 +11,7 @@ x-app-environment: &app-environment
   REDIS_URL: redis://redis:6379
   JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-replace-with-at-least-32-random-characters}
   JWT_REFRESH_PEPPER: ${JWT_REFRESH_PEPPER:-replace-with-a-different-32-character-secret}
+  FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-replace-with-a-different-field-encryption-secret}
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:3000}
   LOG_LEVEL: ${LOG_LEVEL:-info}
   COOKIE_SECURE: ${COOKIE_SECURE:-false}

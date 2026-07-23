@@ -5,6 +5,7 @@ import { AuthTokenService } from './auth-token.service.js';
 import { AuthService } from './auth.service.js';
 import type { AuthStore } from './auth.types.js';
 import type { PasswordService } from './password.service.js';
+import type { MfaService } from './mfa.service.js';
 
 const context = { tenantId: 'tenant-1', actorId: null, correlationId: 'request-1' };
 const user: AuthenticatedUser = {
@@ -32,6 +33,7 @@ describe('AuthService', () => {
     recordAudit = vi.fn<AuthStore['recordAudit']>();
     store = {
       findPasswordUser,
+      findUserById: vi.fn(),
       createSession,
       rotateRefreshToken,
       isSessionActive: vi.fn(),
@@ -53,7 +55,9 @@ describe('AuthService', () => {
       refreshRateLimitMax: 30,
       rateLimitWindowSeconds: 60,
     });
-    service = new AuthService(store, passwords, tokens);
+    service = new AuthService(store, passwords, tokens, {
+      assertLogin: vi.fn(),
+    } as unknown as MfaService);
   });
 
   it('normalizes the email, verifies the password, persists a hashed session, and audits login', async () => {

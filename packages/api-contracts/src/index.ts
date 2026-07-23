@@ -53,3 +53,43 @@ export type AuthenticationResult = {
   readonly expiresIn: number;
   readonly user: AuthenticatedUser;
 };
+
+export type MfaEnrollment = {
+  readonly secret: string;
+  readonly otpauthUri: string;
+};
+
+export type MfaRecoveryCodes = {
+  readonly recoveryCodes: readonly string[];
+};
+
+export type IdentityPermission = {
+  readonly id: string;
+  readonly key: string;
+  readonly description: string;
+};
+
+export type IdentityRole = {
+  readonly id: string;
+  readonly key: string;
+  readonly name: string;
+  readonly description: string | null;
+};
+
+export type IdentityUser = {
+  readonly id: string;
+  readonly email: string;
+  readonly displayName: string;
+  readonly isActive: boolean;
+  readonly verifiedAt: string | null;
+  readonly roles: readonly IdentityRole[];
+};
+
+export type ApiCredentialSummary = {
+  readonly id: string;
+  readonly name: string;
+  readonly keyPrefix: string;
+  readonly scopes: readonly string[];
+  readonly expiresAt: string | null;
+  readonly revokedAt: string | null;
+};

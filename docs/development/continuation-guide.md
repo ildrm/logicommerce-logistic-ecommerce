@@ -4,7 +4,7 @@ This is the canonical handoff for the next developer or coding agent. It
 records what was built, what was verified, which constraints are intentional,
 and where implementation must resume.
 
-Last updated: **2026-07-22**.
+Last updated: **2026-07-23**.
 
 ## Current project state
 
@@ -12,8 +12,11 @@ LogiCommerce is a production-oriented modular-monolith foundation for a
 multi-tenant C2C, B2C, B2B, dropshipping, and 1PL–5PL platform.
 
 - Phase 0, repository and platform foundation, is `TESTED`.
-- Phase 1, tenancy, identity, and authorization, is `IN_PROGRESS`.
-- Phases 2–11 are not complete. Some contain reusable packages or design
+- Phase 1, tenancy, identity, and authorization, is `TESTED`.
+- Phase 2, stores, catalog, offers, and storefront, is `TESTED`.
+- Phase 3, inventory, cart, checkout, and B2C orders, is `TESTED`.
+- Phases 4–7, fulfillment through partner APIs, are `TESTED`.
+- Phases 8–11 are not complete. Some contain reusable packages or design
   boundaries, but that does not satisfy their definitions of done.
 - The visual control-tower prototype under `mockups/control-tower` is a design
   reference, not the production application.
@@ -62,14 +65,22 @@ curl -fsS \
   -H 'x-tenant-id: 00000000-0000-4000-8000-000000000001' \
   http://localhost:8080/api/v1/tenants/current
 pnpm test:auth:live
+pnpm test:commerce:live
+pnpm test:network:live
+pnpm test:e2e
 ```
 
 The second command should return the `platform-demo` tenant. In development,
 the middleware also defaults to this demo tenant when the header is omitted.
 Production must never infer a tenant this way.
-The live authentication command creates only local test sessions, revokes all
-of them before exit, and verifies login, refresh reuse (including a concurrent
-race), tenant mismatch, session revocation, logout, and logout-all.
+The live commands create local test users and records. Authentication coverage
+verifies login, refresh reuse (including a concurrent race), tenant mismatch,
+session revocation, MFA/recovery, role/grant administration, machine
+credentials, verification/reset/passwordless flows, token replay rejection,
+logout, and logout-all. Commerce coverage includes catalog approval, inventory,
+one-unit checkout concurrency, dropship PO acceptance, reconciliation, and
+cross-tenant denial. The E2E command covers desktop and mobile account,
+role-administration, and storefront journeys.
 
 ### 5. Run the repository gates
 
@@ -112,12 +123,17 @@ The seed is idempotent and currently creates:
 - User: `admin@demo.logicommerce.local`
 - Local-only password: `ChangeMe-Local-Only-2026`
 - Role: `tenant-admin`
-- Permission: `tenant.configure`
+- Permissions: `tenant.configure`, `identity.roles.manage`,
+  `identity.users.manage`, `identity.credentials.manage`, `store.manage`,
+  `catalog.submit`, `catalog.approve`, `offer.manage`, `inventory.manage`,
+  `cart.use`, `order.manage`, and `purchase-order.manage`
+- Storefront: `demo-store`, with a category, attribute, approved product,
+  active offer, promotion, and on-hand inventory
 - Isolation tenant ID: `00000000-0000-4000-8000-000000000009`
 - Isolation tenant slug: `isolation-test` (no login identity)
 
-The password is Argon2-hashed in the database. Local API login is implemented;
-the browser sign-in and session-management UI is not.
+The password is Argon2id-hashed in the database. The browser identity center is
+available at `/account`.
 
 ## What has been implemented
 
@@ -151,9 +167,17 @@ The committed migration and Prisma schema currently cover:
 - transactional outbox events;
 - idempotency records.
 
-The schema is a foundation, not a complete catalog, order, WMS, TMS, or finance
-model. Expand it through new committed migrations; do not rewrite the existing
-foundation migration after it has been shared.
+The Phase 1 append-only identity migration adds:
+
+- hashed, expiring, single-use email verification, password reset, and
+  passwordless login tokens;
+- AES-256-GCM encrypted TOTP secrets and replay-step tracking;
+- HMAC-hashed single-use recovery codes;
+- HMAC-hashed, scoped, expirable, and revocable machine credentials.
+
+The schema now includes the tested catalog and B2C order core, but not a
+complete WMS, TMS, returns, or finance model. Expand it through new committed
+migrations; do not rewrite shared migrations.
 
 ### Shared packages
 
@@ -168,6 +192,42 @@ foundation migration after it has been shared.
 | `@logicommerce/observability`    | Structured logging and redaction       |
 | `@logicommerce/ui`               | Shared UI tokens and components        |
 | `@logicommerce/validation`       | Shared input validation primitives     |
+
+### Tested identity boundary
+
+- Trusted verified-domain tenant resolution with a development-only header
+  bridge.
+- Argon2id password login, short-lived tenant/session-bound access tokens,
+  opaque rotating refresh tokens, reuse-family revocation, and active session
+  checks.
+- Session listing, revoke-one, logout, and logout-all.
+- Redis-backed hashed-key login/refresh rate limits that fail closed.
+- Deny-by-default permission declarations and tenant-scoped role, grant, user,
+  user-role, and machine-credential administration.
+- Email verification, password reset, and passwordless login through
+  single-use hashed tokens and a labeled development mail adapter.
+- TOTP enrollment/confirmation, encrypted secrets, replay prevention, and
+  single-use recovery codes.
+- Responsive account UI for sign-in, reset requests, sessions, MFA, role
+  grants, user creation, and role assignment.
+- Provider-neutral OIDC/social adapter port and registry. A concrete external
+  provider is intentionally not selected in this repository.
+- Security audit events and live non-enumerating cross-tenant checks.
+
+### Tested commerce boundary
+
+- Tenant-scoped store/domain configuration, catalog taxonomy and attributes,
+  supplier submissions, merchant approval, products, variants, media,
+  translations, seller offers, and a replaceable MySQL search adapter.
+- Responsive storefront browse/search with loading, empty, error, product, and
+  availability states.
+- Idempotent absolute inventory feeds, derived balances, immutable ledger
+  entries, reservations, expiry release, allocation, and reconciliation.
+- Authenticated carts, promotions, quotes, validated addresses, deterministic
+  development tax/shipping/fraud/payment adapters, and raw-token-free checkout.
+- Serializable, idempotent checkout with atomic non-negative stock decrement,
+  order splits, dropship purchase orders, supplier acceptance, and customer and
+  operations order views.
 
 ## Architecture invariants
 
@@ -211,79 +271,32 @@ Preserve these unless an accepted ADR changes them:
 - `vitest run --dir src` is used for the database package so compiled tests in
   `dist` are not executed a second time.
 
-## Exact next implementation slice: finish Phase 1
+## Exact next release slice: authorized production evidence
 
-The narrow local authentication backend is implemented and unit tested. It
-includes password verification, access and rotating refresh tokens, refresh
-reuse detection, authenticated actor context, session revocation, and auth
-audit events. It is live-tested against MySQL through
-`pnpm test:auth:live`, including simultaneous refresh reuse and a second-tenant
-token mismatch. Do not begin Phase 2 until the Phase 1 exit criteria in the
-roadmap are met.
+Phases 8–11 passed their repository-level verification on 2026-07-23.
+Migration `202607230005_phase8_phase11_platform`, seed, repository gates,
+production images, the Phase 8–11 live journey, Phases 1–7 regressions, browser
+matrix, tenant isolation, Compose health, and the 25-VU load gate passed.
 
-Completed in the 2026-07-22 slice:
+The next slice is provider and release evidence: run the CI security/container
+scan and SBOM job in an authorized environment, produce measured
+domain-critical coverage, commission an external penetration test, select
+production telemetry/secrets/backup/orchestration providers, and execute a real
+provider backup/restore drill against the documented RPO/RTO.
 
-1. Authentication application services and Prisma-isolated repositories.
-2. Seeded Argon2 email/password login with generic credential failures.
-3. Short-lived tenant/session-bound access tokens and opaque, hashed refresh
-   tokens in hardened browser cookies.
-4. Atomic refresh rotation, consumed-token reuse detection, and token-family
-   and session revocation.
-5. Current-user, session listing, revoke-one, logout, and logout-all endpoints.
-6. Authenticated actor context plus active-session validation on protected auth
-   endpoints.
-7. Authentication audit events for login success/failure, refresh reuse,
-   logout, and session revocation.
-8. Idempotent second-tenant seed fixture and a repeatable live authentication
-   integration command covering login, rotation/reuse, concurrent refresh,
-   tenant mismatch, session revocation, logout, and logout-all.
-9. Redis-backed, hashed-key login and refresh rate limits with configurable
-   windows and fail-closed behavior when Redis is unavailable.
-10. Verified hostname/domain tenant resolution; production ignores an
-    untrusted tenant header while local development retains an explicit bridge.
-11. Reusable deny-by-default permission declarations and guards, with
-    `tenants/current` protected by `tenant.configure`.
-12. A read-only viewer fixture plus live admin-allow/viewer-deny coverage and a
-    persisted `auth.permission.denied` audit event.
-13. Raw Fastify middleware/error-filter compatibility and tenant-free health and
-    Swagger infrastructure paths, including the exact Docker health probe.
-
-Continue in this order:
-
-1. Run the live authentication integration command in CI with an isolated
-   database, and add direct automated assertions for audit persistence and
-   non-enumerating cross-tenant resource lookups.
-2. Add role, permission, grant, and user-role administration APIs with
-   deny-by-default permissions, tenant isolation, and role-change audits.
-3. Add Playwright login/logout coverage and accessible sign-in,
-   session-management, loading, empty, and error UI.
-4. Implement password reset and email verification using single-use, hashed,
-   expiring tokens and the mock-mail adapter.
-5. Implement TOTP MFA, recovery codes, MFA-aware sessions, and pluggable
-   OIDC/social provider boundaries.
-6. Add auth/tenant metrics and complete the Phase 1 exit-scenario evidence.
+The implementation adds reverse logistics and immutable finance; multi-client
+3PL billing and human-approved 4PL rerouting; frozen, reproducible 5PL
+recommendations with outcome measurement and rollback; and Phase 11
+operability, recovery, privacy, ingress, scanning, SBOM, and runbook controls.
+Do not mutate posted inventory, finance, audit, tracking, optimization, or
+webhook history; use explicit transitions and compensating records.
 
 ADRs still required as their decisions become active: Redis queue semantics,
-object-storage upload/security model, full authentication model, tenant
-isolation enforcement, Shop API authentication, and search abstraction. Do not
-write speculative ADRs merely to fill the list; record the decision with its
-real constraints before implementing the affected phase.
-
-Suggested initial endpoints:
-
-```text
-POST   /api/v1/auth/login
-POST   /api/v1/auth/refresh
-POST   /api/v1/auth/logout
-POST   /api/v1/auth/logout-all
-GET    /api/v1/auth/sessions
-DELETE /api/v1/auth/sessions/:sessionId
-GET    /api/v1/auth/me
-```
-
-Do not return refresh tokens in JSON when using the browser flow; use an
-`HttpOnly`, `Secure`, `SameSite` cookie and CSRF protection appropriate to the
-selected origin model.
+object-storage upload/security model, tenant isolation enforcement, Shop API
+authentication, and search abstraction. ADR 0007 records the active
+authentication model. Do not write speculative ADRs merely to fill the list;
+record each decision with its real constraints before implementing the affected
+phase.
 
 ## Pull-request workflow
 

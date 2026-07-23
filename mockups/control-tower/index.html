@@ -1,768 +1,2380 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#ebe4d7">
-  <title>Northstar — EMEA Control Tower</title>
-  <style>
-    :root {
-      --bone: #f3eee4;
-      --paper: #fbf8f1;
-      --paper-2: #eee7da;
-      --ink: #172326;
-      --muted: #66706d;
-      --line: #d5cdbf;
-      --teal: #176b63;
-      --teal-soft: #d9e9e4;
-      --orange: #c4662b;
-      --orange-soft: #f3dfce;
-      --red: #a53e38;
-      --red-soft: #f2d8d3;
-      --shadow: 0 18px 50px rgba(38, 33, 24, .16);
-      --serif: Georgia, "Times New Roman", serif;
-      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-    }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ebe4d7" />
+    <title>Northstar — EMEA Control Tower</title>
+    <style>
+      :root {
+        --bone: #f3eee4;
+        --paper: #fbf8f1;
+        --paper-2: #eee7da;
+        --ink: #172326;
+        --muted: #66706d;
+        --line: #d5cdbf;
+        --teal: #176b63;
+        --teal-soft: #d9e9e4;
+        --orange: #c4662b;
+        --orange-soft: #f3dfce;
+        --red: #a53e38;
+        --red-soft: #f2d8d3;
+        --shadow: 0 18px 50px rgba(38, 33, 24, 0.16);
+        --serif: Georgia, 'Times New Roman', serif;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      }
 
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body {
-      margin: 0;
-      min-width: 320px;
-      background: var(--bone);
-      color: var(--ink);
-      font-family: var(--sans);
-      font-size: 14px;
-      line-height: 1.45;
-      overflow-x: hidden;
-    }
-    button, input { font: inherit; color: inherit; }
-    button { cursor: pointer; }
-    button:focus-visible, [tabindex]:focus-visible, input:focus-visible {
-      outline: 2px solid var(--orange);
-      outline-offset: 2px;
-    }
-    .icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
-    .eyebrow {
-      margin: 0;
-      font: 700 10px/1.2 var(--mono);
-      letter-spacing: .13em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-    .tabular { font-variant-numeric: tabular-nums; }
-    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        min-width: 320px;
+        background: var(--bone);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 14px;
+        line-height: 1.45;
+        overflow-x: hidden;
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:focus-visible,
+      [tabindex]:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--orange);
+        outline-offset: 2px;
+      }
+      .icon {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .eyebrow {
+        margin: 0;
+        font: 700 10px/1.2 var(--mono);
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .tabular {
+        font-variant-numeric: tabular-nums;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+      }
 
-    .app-shell { min-height: 100vh; display: grid; grid-template-columns: 76px minmax(0,1fr); grid-template-rows: 64px 1fr; }
-    .topbar {
-      grid-column: 1 / -1;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      height: 64px;
-      border-bottom: 1px solid #bab1a3;
-      background: rgba(243,238,228,.97);
-      padding: 0 24px 0 20px;
-    }
-    .brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
-    .brand-mark { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 16px; letter-spacing: -.02em; }
-    .compass { width: 24px; height: 24px; color: var(--teal); }
-    .module-label { border-left: 1px solid var(--line); padding-left: 16px; font: 700 10px var(--mono); letter-spacing: .15em; color: var(--muted); }
-    .tenant-switch {
-      appearance: none;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-width: 250px;
-      border: 1px solid var(--line);
-      background: var(--paper);
-      padding: 8px 12px;
-      border-radius: 5px;
-      text-align: left;
-    }
-    .tenant-switch:hover { border-color: #a9a092; }
-    .tenant-switch .stack { flex: 1; display: grid; line-height: 1.2; }
-    .tenant-switch strong { font-size: 12px; }
-    .tenant-switch small { font: 10px var(--mono); color: var(--muted); margin-top: 2px; }
-    .top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-    .command {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      width: min(220px, 19vw);
-      border: 1px solid var(--line);
-      background: transparent;
-      border-radius: 4px;
-      padding: 8px 10px;
-      color: var(--muted);
-      text-align: left;
-    }
-    .command span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .command kbd { margin-left: auto; border: 1px solid var(--line); padding: 1px 4px; font: 9px var(--mono); background: var(--paper); }
-    .icon-btn { position: relative; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid transparent; background: transparent; border-radius: 4px; }
-    .icon-btn:hover { background: var(--paper-2); border-color: var(--line); }
-    .notify-dot { position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; background: var(--red); border: 1px solid var(--bone); border-radius: 50%; }
-    .avatar { display: grid; place-items: center; width: 32px; height: 32px; margin-left: 4px; background: var(--ink); color: var(--paper); border-radius: 50%; font: 700 10px var(--mono); }
+      .app-shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 76px minmax(0, 1fr);
+        grid-template-rows: 64px 1fr;
+      }
+      .topbar {
+        grid-column: 1 / -1;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        height: 64px;
+        border-bottom: 1px solid #bab1a3;
+        background: rgba(243, 238, 228, 0.97);
+        padding: 0 24px 0 20px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-width: 0;
+      }
+      .brand-mark {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-weight: 800;
+        font-size: 16px;
+        letter-spacing: -0.02em;
+      }
+      .compass {
+        width: 24px;
+        height: 24px;
+        color: var(--teal);
+      }
+      .module-label {
+        border-left: 1px solid var(--line);
+        padding-left: 16px;
+        font: 700 10px var(--mono);
+        letter-spacing: 0.15em;
+        color: var(--muted);
+      }
+      .tenant-switch {
+        appearance: none;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 250px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        padding: 8px 12px;
+        border-radius: 5px;
+        text-align: left;
+      }
+      .tenant-switch:hover {
+        border-color: #a9a092;
+      }
+      .tenant-switch .stack {
+        flex: 1;
+        display: grid;
+        line-height: 1.2;
+      }
+      .tenant-switch strong {
+        font-size: 12px;
+      }
+      .tenant-switch small {
+        font: 10px var(--mono);
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .top-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .command {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: min(220px, 19vw);
+        border: 1px solid var(--line);
+        background: transparent;
+        border-radius: 4px;
+        padding: 8px 10px;
+        color: var(--muted);
+        text-align: left;
+      }
+      .command span {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .command kbd {
+        margin-left: auto;
+        border: 1px solid var(--line);
+        padding: 1px 4px;
+        font: 9px var(--mono);
+        background: var(--paper);
+      }
+      .icon-btn {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 4px;
+      }
+      .icon-btn:hover {
+        background: var(--paper-2);
+        border-color: var(--line);
+      }
+      .notify-dot {
+        position: absolute;
+        top: 7px;
+        right: 7px;
+        width: 6px;
+        height: 6px;
+        background: var(--red);
+        border: 1px solid var(--bone);
+        border-radius: 50%;
+      }
+      .avatar {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        margin-left: 4px;
+        background: var(--ink);
+        color: var(--paper);
+        border-radius: 50%;
+        font: 700 10px var(--mono);
+      }
 
-    .rail {
-      grid-row: 2;
-      position: sticky;
-      top: 64px;
-      height: calc(100vh - 64px);
-      z-index: 30;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      border-right: 1px solid #bab1a3;
-      background: var(--bone);
-      padding: 12px 8px;
-    }
-    .nav-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
-    .nav-button {
-      width: 100%;
-      min-height: 52px;
-      display: grid;
-      place-items: center;
-      gap: 3px;
-      border: 1px solid transparent;
-      background: transparent;
-      border-radius: 5px;
-      color: #59625f;
-      padding: 5px 2px;
-      font-size: 9px;
-    }
-    .nav-button .icon { width: 17px; height: 17px; }
-    .nav-button:hover { color: var(--ink); background: var(--paper-2); }
-    .nav-button.active { background: var(--ink); color: var(--paper); }
+      .rail {
+        grid-row: 2;
+        position: sticky;
+        top: 64px;
+        height: calc(100vh - 64px);
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        border-right: 1px solid #bab1a3;
+        background: var(--bone);
+        padding: 12px 8px;
+      }
+      .nav-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 5px;
+      }
+      .nav-button {
+        width: 100%;
+        min-height: 52px;
+        display: grid;
+        place-items: center;
+        gap: 3px;
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 5px;
+        color: #59625f;
+        padding: 5px 2px;
+        font-size: 9px;
+      }
+      .nav-button .icon {
+        width: 17px;
+        height: 17px;
+      }
+      .nav-button:hover {
+        color: var(--ink);
+        background: var(--paper-2);
+      }
+      .nav-button.active {
+        background: var(--ink);
+        color: var(--paper);
+      }
 
-    main { min-width: 0; padding: 29px 30px 48px; }
-    .content { max-width: 1550px; margin: 0 auto; }
-    .context-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
-    .breadcrumbs { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; color: var(--muted); font: 10px var(--mono); }
-    .context-row h1 { margin: 0; font: 500 clamp(34px,3.1vw,48px)/1 var(--serif); letter-spacing: -.035em; }
-    .status-narrative { margin: 9px 0 0; font-size: 14px; color: #4e5a57; }
-    .status-narrative strong { color: var(--ink); }
-    .update-cluster { display: flex; align-items: center; gap: 12px; padding-bottom: 2px; }
-    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 4px var(--teal-soft); }
-    .updated { text-align: right; }
-    .updated strong { display: block; font: 600 10px var(--mono); }
-    .updated small { color: var(--muted); font-size: 11px; }
-    .refresh-btn { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--paper); padding: 8px 10px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-    .refresh-btn:hover { border-color: var(--teal); color: var(--teal); }
-    .refresh-btn.spinning .icon { animation: spin .7s linear infinite; }
+      main {
+        min-width: 0;
+        padding: 29px 30px 48px;
+      }
+      .content {
+        max-width: 1550px;
+        margin: 0 auto;
+      }
+      .context-row {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 22px;
+      }
+      .breadcrumbs {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 7px;
+        color: var(--muted);
+        font: 10px var(--mono);
+      }
+      .context-row h1 {
+        margin: 0;
+        font: 500 clamp(34px, 3.1vw, 48px)/1 var(--serif);
+        letter-spacing: -0.035em;
+      }
+      .status-narrative {
+        margin: 9px 0 0;
+        font-size: 14px;
+        color: #4e5a57;
+      }
+      .status-narrative strong {
+        color: var(--ink);
+      }
+      .update-cluster {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 2px;
+      }
+      .live-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--teal);
+        box-shadow: 0 0 0 4px var(--teal-soft);
+      }
+      .updated {
+        text-align: right;
+      }
+      .updated strong {
+        display: block;
+        font: 600 10px var(--mono);
+      }
+      .updated small {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .refresh-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        padding: 8px 10px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .refresh-btn:hover {
+        border-color: var(--teal);
+        color: var(--teal);
+      }
+      .refresh-btn.spinning .icon {
+        animation: spin 0.7s linear infinite;
+      }
 
-    .kpi-band {
-      display: grid;
-      grid-template-columns: 1.12fr 1fr 1.12fr .9fr .95fr;
-      background: var(--ink);
-      color: var(--paper);
-      border-radius: 6px 6px 0 0;
-      overflow: hidden;
-    }
-    .kpi { min-width: 0; padding: 17px 19px 15px; border-right: 1px solid rgba(255,255,255,.13); }
-    .kpi:last-child { border-right: 0; }
-    .kpi-label { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; color: #bcc3be; font-size: 10px; }
-    .kpi-label .icon { width: 13px; height: 13px; }
-    .kpi-main { display: flex; align-items: baseline; justify-content: space-between; gap: 7px; }
-    .kpi-value { font: 500 clamp(21px,2vw,29px)/1 var(--serif); letter-spacing: -.025em; }
-    .delta { font: 700 9px var(--mono); white-space: nowrap; }
-    .delta.good { color: #70c4aa; }
-    .delta.bad { color: #ef9b83; }
-    .delta.warn { color: #f1b06f; }
-    .kpi-sub { margin-top: 7px; color: #98a29f; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
+      .kpi-band {
+        display: grid;
+        grid-template-columns: 1.12fr 1fr 1.12fr 0.9fr 0.95fr;
+        background: var(--ink);
+        color: var(--paper);
+        border-radius: 6px 6px 0 0;
+        overflow: hidden;
+      }
+      .kpi {
+        min-width: 0;
+        padding: 17px 19px 15px;
+        border-right: 1px solid rgba(255, 255, 255, 0.13);
+      }
+      .kpi:last-child {
+        border-right: 0;
+      }
+      .kpi-label {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 9px;
+        color: #bcc3be;
+        font-size: 10px;
+      }
+      .kpi-label .icon {
+        width: 13px;
+        height: 13px;
+      }
+      .kpi-main {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 7px;
+      }
+      .kpi-value {
+        font: 500 clamp(21px, 2vw, 29px)/1 var(--serif);
+        letter-spacing: -0.025em;
+      }
+      .delta {
+        font: 700 9px var(--mono);
+        white-space: nowrap;
+      }
+      .delta.good {
+        color: #70c4aa;
+      }
+      .delta.bad {
+        color: #ef9b83;
+      }
+      .delta.warn {
+        color: #f1b06f;
+      }
+      .kpi-sub {
+        margin-top: 7px;
+        color: #98a29f;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
 
-    .workspace-grid { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(350px,.83fr); min-height: 495px; }
-    .map-panel { position: relative; min-width: 0; background-color: #e9e4d9; border: 1px solid #c9c0b2; border-top: 0; overflow: hidden; }
-    .map-panel::before {
-      content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .23;
-      background-image: linear-gradient(#8d948c 1px, transparent 1px), linear-gradient(90deg,#8d948c 1px,transparent 1px);
-      background-size: 34px 34px;
-    }
-    .map-toolbar { position: absolute; z-index: 5; top: 14px; left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .segmented { display: flex; border: 1px solid #bfb5a6; background: rgba(251,248,241,.95); border-radius: 5px; overflow: hidden; }
-    .segmented button { border: 0; border-right: 1px solid var(--line); background: transparent; padding: 8px 12px; font: 700 10px var(--sans); }
-    .segmented button:last-child { border-right: 0; }
-    .segmented button:hover { background: var(--paper-2); }
-    .segmented button.active { background: var(--ink); color: var(--paper); }
-    .map-meta { display: flex; gap: 8px; align-items: center; font: 9px var(--mono); color: #5e6763; background: rgba(251,248,241,.86); padding: 6px 8px; border: 1px solid var(--line); }
-    .network-map { position: absolute; inset: 0; width: 100%; height: 100%; }
-    .land { fill: #d6d3c8; stroke: #aaa99f; stroke-width: 1; }
-    .minor-route { fill: none; stroke: #6a8f87; stroke-width: 2; stroke-dasharray: 4 7; opacity: .85; }
-    .watch-route { fill: none; stroke: #c4662b; stroke-width: 2.2; stroke-dasharray: 7 5; }
-    .risk-halo { fill: none; stroke: rgba(165,62,56,.18); stroke-width: 13; }
-    .risk-route { fill: none; stroke: var(--red); stroke-width: 3; stroke-dasharray: 10 7; animation: route 1.2s linear infinite; }
-    .route-arrow { fill: var(--red); }
-    .node { cursor: pointer; }
-    .node .target { fill: transparent; }
-    .node .halo { opacity: .18; }
-    .node .core { stroke: var(--paper); stroke-width: 2.5; }
-    .node text { font: 700 11px var(--sans); fill: var(--ink); paint-order: stroke; stroke: #ebe6dc; stroke-width: 4; stroke-linejoin: round; }
-    .node .node-state { font: 8px var(--mono); fill: #59625f; letter-spacing: .08em; }
-    .node:hover .halo, .node.selected .halo { opacity: .34; }
-    .node.selected .target { fill: rgba(23,35,38,.07); stroke: rgba(23,35,38,.25); stroke-width: 1; }
-    .route-tag rect { fill: #fffaf0; stroke: #a53e38; rx: 3; }
-    .route-tag text { fill: #792d28; font: 700 8px var(--mono); letter-spacing: .04em; }
-    .weather-symbol { display: none; }
-    .weather-on .weather-symbol { display: block; }
-    .shipments-on .minor-route { stroke-width: 4; stroke-dasharray: 2 5; }
-    .shipments-on .watch-route { stroke-width: 4; }
-    .weather-symbol circle { fill: #f8f2e5; stroke: #8d948c; }
-    .weather-symbol path { fill: none; stroke: #315d70; stroke-width: 1.5; stroke-linecap: round; }
-    .legend { position: absolute; z-index: 5; right: 14px; bottom: 58px; display: flex; gap: 11px; background: rgba(251,248,241,.9); border: 1px solid var(--line); padding: 6px 8px; font: 9px var(--mono); }
-    .legend span { display: flex; align-items: center; gap: 5px; }
-    .legend i { width: 7px; height: 7px; border-radius: 50%; }
-    .map-footer {
-      position: absolute; z-index: 4; left: 0; right: 0; bottom: 0; min-height: 48px;
-      display: flex; align-items: center; gap: 17px; border-top: 1px solid #bfb5a6; background: rgba(246,241,231,.96); padding: 8px 16px;
-    }
-    .map-footer .node-title { min-width: 112px; }
-    .node-title strong { display: block; font: 500 15px var(--serif); }
-    .node-title span { font: 9px var(--mono); color: var(--muted); }
-    .node-stat { border-left: 1px solid var(--line); padding-left: 16px; }
-    .node-stat strong { display: block; font: 700 11px var(--mono); }
-    .node-stat span { color: var(--muted); font-size: 9px; }
+      .workspace-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) minmax(350px, 0.83fr);
+        min-height: 495px;
+      }
+      .map-panel {
+        position: relative;
+        min-width: 0;
+        background-color: #e9e4d9;
+        border: 1px solid #c9c0b2;
+        border-top: 0;
+        overflow: hidden;
+      }
+      .map-panel::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.23;
+        background-image:
+          linear-gradient(#8d948c 1px, transparent 1px),
+          linear-gradient(90deg, #8d948c 1px, transparent 1px);
+        background-size: 34px 34px;
+      }
+      .map-toolbar {
+        position: absolute;
+        z-index: 5;
+        top: 14px;
+        left: 16px;
+        right: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .segmented {
+        display: flex;
+        border: 1px solid #bfb5a6;
+        background: rgba(251, 248, 241, 0.95);
+        border-radius: 5px;
+        overflow: hidden;
+      }
+      .segmented button {
+        border: 0;
+        border-right: 1px solid var(--line);
+        background: transparent;
+        padding: 8px 12px;
+        font: 700 10px var(--sans);
+      }
+      .segmented button:last-child {
+        border-right: 0;
+      }
+      .segmented button:hover {
+        background: var(--paper-2);
+      }
+      .segmented button.active {
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .map-meta {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font: 9px var(--mono);
+        color: #5e6763;
+        background: rgba(251, 248, 241, 0.86);
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+      }
+      .network-map {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .land {
+        fill: #d6d3c8;
+        stroke: #aaa99f;
+        stroke-width: 1;
+      }
+      .minor-route {
+        fill: none;
+        stroke: #6a8f87;
+        stroke-width: 2;
+        stroke-dasharray: 4 7;
+        opacity: 0.85;
+      }
+      .watch-route {
+        fill: none;
+        stroke: #c4662b;
+        stroke-width: 2.2;
+        stroke-dasharray: 7 5;
+      }
+      .risk-halo {
+        fill: none;
+        stroke: rgba(165, 62, 56, 0.18);
+        stroke-width: 13;
+      }
+      .risk-route {
+        fill: none;
+        stroke: var(--red);
+        stroke-width: 3;
+        stroke-dasharray: 10 7;
+        animation: route 1.2s linear infinite;
+      }
+      .route-arrow {
+        fill: var(--red);
+      }
+      .node {
+        cursor: pointer;
+      }
+      .node .target {
+        fill: transparent;
+      }
+      .node .halo {
+        opacity: 0.18;
+      }
+      .node .core {
+        stroke: var(--paper);
+        stroke-width: 2.5;
+      }
+      .node text {
+        font: 700 11px var(--sans);
+        fill: var(--ink);
+        paint-order: stroke;
+        stroke: #ebe6dc;
+        stroke-width: 4;
+        stroke-linejoin: round;
+      }
+      .node .node-state {
+        font: 8px var(--mono);
+        fill: #59625f;
+        letter-spacing: 0.08em;
+      }
+      .node:hover .halo,
+      .node.selected .halo {
+        opacity: 0.34;
+      }
+      .node.selected .target {
+        fill: rgba(23, 35, 38, 0.07);
+        stroke: rgba(23, 35, 38, 0.25);
+        stroke-width: 1;
+      }
+      .route-tag rect {
+        fill: #fffaf0;
+        stroke: #a53e38;
+        rx: 3;
+      }
+      .route-tag text {
+        fill: #792d28;
+        font: 700 8px var(--mono);
+        letter-spacing: 0.04em;
+      }
+      .weather-symbol {
+        display: none;
+      }
+      .weather-on .weather-symbol {
+        display: block;
+      }
+      .shipments-on .minor-route {
+        stroke-width: 4;
+        stroke-dasharray: 2 5;
+      }
+      .shipments-on .watch-route {
+        stroke-width: 4;
+      }
+      .weather-symbol circle {
+        fill: #f8f2e5;
+        stroke: #8d948c;
+      }
+      .weather-symbol path {
+        fill: none;
+        stroke: #315d70;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+      }
+      .legend {
+        position: absolute;
+        z-index: 5;
+        right: 14px;
+        bottom: 58px;
+        display: flex;
+        gap: 11px;
+        background: rgba(251, 248, 241, 0.9);
+        border: 1px solid var(--line);
+        padding: 6px 8px;
+        font: 9px var(--mono);
+      }
+      .legend span {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .legend i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+      .map-footer {
+        position: absolute;
+        z-index: 4;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        gap: 17px;
+        border-top: 1px solid #bfb5a6;
+        background: rgba(246, 241, 231, 0.96);
+        padding: 8px 16px;
+      }
+      .map-footer .node-title {
+        min-width: 112px;
+      }
+      .node-title strong {
+        display: block;
+        font: 500 15px var(--serif);
+      }
+      .node-title span {
+        font: 9px var(--mono);
+        color: var(--muted);
+      }
+      .node-stat {
+        border-left: 1px solid var(--line);
+        padding-left: 16px;
+      }
+      .node-stat strong {
+        display: block;
+        font: 700 11px var(--mono);
+      }
+      .node-stat span {
+        color: var(--muted);
+        font-size: 9px;
+      }
 
-    .exceptions { border-right: 1px solid #c9c0b2; border-bottom: 1px solid #c9c0b2; background: var(--paper); min-width: 0; }
-    .queue-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 17px 12px; border-bottom: 1px solid var(--line); }
-    .queue-head h2 { margin: 2px 0 0; font: 500 22px var(--serif); letter-spacing: -.02em; }
-    .queue-count { display: grid; place-items: center; width: 29px; height: 29px; border-radius: 50%; color: var(--paper); background: var(--red); font: 700 11px var(--mono); }
-    .filters { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
-    .filter-btn { border: 1px solid var(--line); background: transparent; border-radius: 14px; padding: 5px 9px; font-size: 10px; font-weight: 700; }
-    .filter-btn:hover { border-color: #958c7f; }
-    .filter-btn.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
-    .exception-list { list-style: none; margin: 0; padding: 0; max-height: 322px; overflow-y: auto; }
-    .exception-row { position: relative; border-bottom: 1px solid var(--line); }
-    .exception-row:last-child { border-bottom: 0; }
-    .exception-main { width: 100%; display: grid; grid-template-columns: 26px minmax(0,1fr) auto; gap: 10px; border: 0; background: transparent; padding: 12px 13px; text-align: left; }
-    .exception-main:hover { background: #f4efe6; }
-    .exception-row.selected { box-shadow: inset 3px 0 var(--orange); background: #f6eee4; }
-    .severity-icon { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 4px; }
-    .severity-icon .icon { width: 14px; height: 14px; }
-    .critical .severity-icon { color: var(--red); background: var(--red-soft); }
-    .watch .severity-icon { color: #9a4d20; background: var(--orange-soft); }
-    .exception-copy { min-width: 0; }
-    .severity-label { display: block; margin-bottom: 2px; font: 700 8px var(--mono); letter-spacing: .09em; text-transform: uppercase; }
-    .critical .severity-label { color: var(--red); }
-    .watch .severity-label { color: #9a4d20; }
-    .exception-copy strong { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .exception-copy small { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .exception-impact { min-width: 64px; text-align: right; }
-    .exception-impact strong { display: block; font: 700 10px var(--mono); }
-    .exception-impact small { display: block; color: var(--red); font: 700 8px var(--mono); margin-top: 3px; }
-    .review-link { border: 0; background: transparent; color: var(--red); font-size: 9px; font-weight: 800; padding: 0 13px 10px 49px; }
-    .review-link:hover { text-decoration: underline; }
-    .approved-row { opacity: .52; }
-    .approved-row::after { content: "APPROVED"; position: absolute; right: 13px; top: 12px; color: var(--teal); font: 800 8px var(--mono); letter-spacing: .1em; }
-    .approved-row .exception-impact { visibility: hidden; }
-    .queue-detail { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; align-items: center; min-height: 61px; border-top: 1px solid #aaa092; background: #eee8dc; padding: 9px 13px; }
-    .queue-detail .detail-id { font: 800 9px var(--mono); color: var(--orange); }
-    .queue-detail strong { display: block; font-size: 10px; }
-    .queue-detail small { color: var(--muted); font-size: 9px; }
-    .queue-detail button { grid-column: 2; grid-row: 1 / 3; border: 0; border-left: 1px solid var(--line); background: transparent; padding: 8px 2px 8px 12px; color: var(--teal); font-size: 9px; font-weight: 800; }
-    .queue-detail button:hover { text-decoration: underline; }
+      .exceptions {
+        border-right: 1px solid #c9c0b2;
+        border-bottom: 1px solid #c9c0b2;
+        background: var(--paper);
+        min-width: 0;
+      }
+      .queue-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 16px 17px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .queue-head h2 {
+        margin: 2px 0 0;
+        font: 500 22px var(--serif);
+        letter-spacing: -0.02em;
+      }
+      .queue-count {
+        display: grid;
+        place-items: center;
+        width: 29px;
+        height: 29px;
+        border-radius: 50%;
+        color: var(--paper);
+        background: var(--red);
+        font: 700 11px var(--mono);
+      }
+      .filters {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .filter-btn {
+        border: 1px solid var(--line);
+        background: transparent;
+        border-radius: 14px;
+        padding: 5px 9px;
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .filter-btn:hover {
+        border-color: #958c7f;
+      }
+      .filter-btn.active {
+        background: var(--ink);
+        border-color: var(--ink);
+        color: var(--paper);
+      }
+      .exception-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 322px;
+        overflow-y: auto;
+      }
+      .exception-row {
+        position: relative;
+        border-bottom: 1px solid var(--line);
+      }
+      .exception-row:last-child {
+        border-bottom: 0;
+      }
+      .exception-main {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 26px minmax(0, 1fr) auto;
+        gap: 10px;
+        border: 0;
+        background: transparent;
+        padding: 12px 13px;
+        text-align: left;
+      }
+      .exception-main:hover {
+        background: #f4efe6;
+      }
+      .exception-row.selected {
+        box-shadow: inset 3px 0 var(--orange);
+        background: #f6eee4;
+      }
+      .severity-icon {
+        display: grid;
+        place-items: center;
+        width: 25px;
+        height: 25px;
+        border-radius: 4px;
+      }
+      .severity-icon .icon {
+        width: 14px;
+        height: 14px;
+      }
+      .critical .severity-icon {
+        color: var(--red);
+        background: var(--red-soft);
+      }
+      .watch .severity-icon {
+        color: #9a4d20;
+        background: var(--orange-soft);
+      }
+      .exception-copy {
+        min-width: 0;
+      }
+      .severity-label {
+        display: block;
+        margin-bottom: 2px;
+        font: 700 8px var(--mono);
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+      }
+      .critical .severity-label {
+        color: var(--red);
+      }
+      .watch .severity-label {
+        color: #9a4d20;
+      }
+      .exception-copy strong {
+        display: block;
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .exception-copy small {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 9px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .exception-impact {
+        min-width: 64px;
+        text-align: right;
+      }
+      .exception-impact strong {
+        display: block;
+        font: 700 10px var(--mono);
+      }
+      .exception-impact small {
+        display: block;
+        color: var(--red);
+        font: 700 8px var(--mono);
+        margin-top: 3px;
+      }
+      .review-link {
+        border: 0;
+        background: transparent;
+        color: var(--red);
+        font-size: 9px;
+        font-weight: 800;
+        padding: 0 13px 10px 49px;
+      }
+      .review-link:hover {
+        text-decoration: underline;
+      }
+      .approved-row {
+        opacity: 0.52;
+      }
+      .approved-row::after {
+        content: 'APPROVED';
+        position: absolute;
+        right: 13px;
+        top: 12px;
+        color: var(--teal);
+        font: 800 8px var(--mono);
+        letter-spacing: 0.1em;
+      }
+      .approved-row .exception-impact {
+        visibility: hidden;
+      }
+      .queue-detail {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 3px 12px;
+        align-items: center;
+        min-height: 61px;
+        border-top: 1px solid #aaa092;
+        background: #eee8dc;
+        padding: 9px 13px;
+      }
+      .queue-detail .detail-id {
+        font: 800 9px var(--mono);
+        color: var(--orange);
+      }
+      .queue-detail strong {
+        display: block;
+        font-size: 10px;
+      }
+      .queue-detail small {
+        color: var(--muted);
+        font-size: 9px;
+      }
+      .queue-detail button {
+        grid-column: 2;
+        grid-row: 1 / 3;
+        border: 0;
+        border-left: 1px solid var(--line);
+        background: transparent;
+        padding: 8px 2px 8px 12px;
+        color: var(--teal);
+        font-size: 9px;
+        font-weight: 800;
+      }
+      .queue-detail button:hover {
+        text-decoration: underline;
+      }
 
-    .lower-strip { display: grid; grid-template-columns: 1.6fr .86fr; border: 1px solid #c9c0b2; border-top: 0; background: var(--paper); }
-    .facility-section, .timeline-section { padding: 20px; }
-    .facility-section { border-right: 1px solid var(--line); }
-    .section-title { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; gap: 15px; }
-    .section-title h2 { margin: 2px 0 0; font: 500 21px var(--serif); }
-    .section-title a { color: var(--teal); text-decoration: none; font-size: 10px; font-weight: 700; }
-    .facility-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 20px; }
-    .facility { min-width: 0; }
-    .facility-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
-    .facility-top strong { font-size: 11px; }
-    .facility-top span { font: 700 10px var(--mono); }
-    .bar { height: 5px; margin: 8px 0 6px; background: #ded7ca; overflow: hidden; }
-    .bar i { display: block; height: 100%; background: var(--teal); }
-    .facility.watch .bar i { background: var(--orange); }
-    .facility.critical .bar i { background: var(--red); }
-    .facility small { color: var(--muted); font-size: 9px; }
-    .facility small b { color: inherit; }
-    .timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 13px; }
-    .timeline li { position: relative; display: grid; grid-template-columns: 45px 9px 1fr; gap: 8px; align-items: start; }
-    .timeline li:not(:last-child)::after { content: ""; position: absolute; left: 57px; top: 11px; bottom: -16px; width: 1px; background: var(--line); }
-    .timeline time { font: 700 9px var(--mono); color: var(--muted); }
-    .timeline i { position: relative; z-index: 1; width: 7px; height: 7px; border-radius: 50%; margin-top: 3px; background: var(--teal); box-shadow: 0 0 0 3px var(--paper); }
-    .timeline .warn i { background: var(--orange); }
-    .timeline strong { display: block; font-size: 10px; }
-    .timeline small { color: var(--muted); font-size: 9px; }
+      .lower-strip {
+        display: grid;
+        grid-template-columns: 1.6fr 0.86fr;
+        border: 1px solid #c9c0b2;
+        border-top: 0;
+        background: var(--paper);
+      }
+      .facility-section,
+      .timeline-section {
+        padding: 20px;
+      }
+      .facility-section {
+        border-right: 1px solid var(--line);
+      }
+      .section-title {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 16px;
+        gap: 15px;
+      }
+      .section-title h2 {
+        margin: 2px 0 0;
+        font: 500 21px var(--serif);
+      }
+      .section-title a {
+        color: var(--teal);
+        text-decoration: none;
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .facility-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+      }
+      .facility {
+        min-width: 0;
+      }
+      .facility-top {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 6px;
+      }
+      .facility-top strong {
+        font-size: 11px;
+      }
+      .facility-top span {
+        font: 700 10px var(--mono);
+      }
+      .bar {
+        height: 5px;
+        margin: 8px 0 6px;
+        background: #ded7ca;
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        background: var(--teal);
+      }
+      .facility.watch .bar i {
+        background: var(--orange);
+      }
+      .facility.critical .bar i {
+        background: var(--red);
+      }
+      .facility small {
+        color: var(--muted);
+        font-size: 9px;
+      }
+      .facility small b {
+        color: inherit;
+      }
+      .timeline {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 13px;
+      }
+      .timeline li {
+        position: relative;
+        display: grid;
+        grid-template-columns: 45px 9px 1fr;
+        gap: 8px;
+        align-items: start;
+      }
+      .timeline li:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        left: 57px;
+        top: 11px;
+        bottom: -16px;
+        width: 1px;
+        background: var(--line);
+      }
+      .timeline time {
+        font: 700 9px var(--mono);
+        color: var(--muted);
+      }
+      .timeline i {
+        position: relative;
+        z-index: 1;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        margin-top: 3px;
+        background: var(--teal);
+        box-shadow: 0 0 0 3px var(--paper);
+      }
+      .timeline .warn i {
+        background: var(--orange);
+      }
+      .timeline strong {
+        display: block;
+        font-size: 10px;
+      }
+      .timeline small {
+        color: var(--muted);
+        font-size: 9px;
+      }
 
-    .drawer-backdrop { position: fixed; inset: 0; z-index: 90; background: rgba(23,35,38,.35); opacity: 0; pointer-events: none; transition: opacity .22s ease; }
-    .decision-drawer {
-      position: fixed; z-index: 100; top: 0; bottom: 0; right: 0; width: min(570px,100vw); overflow-y: auto;
-      background: var(--paper); border-left: 1px solid #9e9588; box-shadow: var(--shadow); transform: translateX(102%); transition: transform .3s cubic-bezier(.2,.75,.25,1);
-    }
-    body.drawer-open { overflow: hidden; }
-    body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
-    body.drawer-open .decision-drawer { transform: translateX(0); }
-    .drawer-header { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: flex-start; padding: 22px 24px 17px; background: rgba(251,248,241,.97); border-bottom: 1px solid var(--line); }
-    .drawer-header h2 { margin: 4px 0 0; font: 500 28px/1.1 var(--serif); letter-spacing: -.025em; }
-    .drawer-body { padding: 21px 24px 112px; }
-    .decision-lead { display: flex; gap: 11px; padding: 12px 13px; border-left: 3px solid var(--orange); background: var(--orange-soft); font-size: 11px; }
-    .decision-lead .icon { flex: 0 0 auto; width: 17px; height: 17px; color: #8e451d; }
-    .plan-compare { display: grid; grid-template-columns: 1fr 1fr; margin-top: 19px; border: 1px solid var(--line); }
-    .plan { padding: 16px; min-width: 0; }
-    .plan + .plan { border-left: 1px solid var(--line); background: #edf3ee; }
-    .plan-badge { display: inline-block; margin-bottom: 11px; color: var(--muted); font: 800 8px var(--mono); letter-spacing: .1em; }
-    .recommended .plan-badge { color: var(--teal); }
-    .plan h3 { margin: 0 0 4px; font: 500 17px/1.15 var(--serif); }
-    .plan > p { margin: 0 0 13px; color: var(--muted); font-size: 10px; min-height: 30px; }
-    .plan-datum { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid rgba(106,112,109,.2); gap: 8px; }
-    .plan-datum span { color: var(--muted); font-size: 9px; }
-    .plan-datum strong { text-align: right; font: 700 10px var(--mono); }
-    .confidence { color: var(--teal); }
-    .tradeoff { margin: 13px 0 21px; padding: 11px 13px; background: var(--ink); color: var(--paper); font-size: 11px; line-height: 1.55; }
-    .rationale h3, .alternates h3, .audit h3 { margin: 0 0 10px; font: 500 17px var(--serif); }
-    .score-grid { display: grid; grid-template-columns: repeat(5,1fr); border: 1px solid var(--line); }
-    .score { padding: 10px 8px; border-right: 1px solid var(--line); }
-    .score:last-child { border-right: 0; }
-    .score span { display: block; color: var(--muted); font-size: 8px; }
-    .score strong { font: 800 11px var(--mono); color: var(--teal); }
-    .score.negative strong { color: var(--red); }
-    .alternates { margin-top: 21px; }
-    .alternate { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
-    .alternate strong { font-size: 10px; }
-    .alternate .alt-score { grid-row: 1/3; grid-column: 2; align-self: center; font: 800 11px var(--mono); }
-    .alternate small { color: var(--muted); font-size: 9px; }
-    .audit { display: flex; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
-    .audit .icon { flex: 0 0 auto; color: var(--teal); }
-    .audit h3 { margin: 0 0 3px; font-size: 14px; }
-    .audit p { margin: 0; color: var(--muted); font-size: 9px; }
-    .drawer-actions { position: fixed; z-index: 3; right: 0; bottom: 0; width: min(570px,100vw); display: flex; gap: 9px; border-top: 1px solid var(--line); background: var(--paper); padding: 15px 24px; }
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 1px solid var(--ink); border-radius: 4px; padding: 9px 15px; font-weight: 800; font-size: 11px; }
-    .btn.primary { flex: 1; background: var(--ink); color: var(--paper); }
-    .btn.primary:hover { background: var(--teal); border-color: var(--teal); }
-    .btn.secondary { background: transparent; }
-    .btn.secondary:hover { background: var(--paper-2); }
+      .drawer-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 90;
+        background: rgba(23, 35, 38, 0.35);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.22s ease;
+      }
+      .decision-drawer {
+        position: fixed;
+        z-index: 100;
+        top: 0;
+        bottom: 0;
+        right: 0;
+        width: min(570px, 100vw);
+        overflow-y: auto;
+        background: var(--paper);
+        border-left: 1px solid #9e9588;
+        box-shadow: var(--shadow);
+        transform: translateX(102%);
+        transition: transform 0.3s cubic-bezier(0.2, 0.75, 0.25, 1);
+      }
+      body.drawer-open {
+        overflow: hidden;
+      }
+      body.drawer-open .drawer-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      body.drawer-open .decision-drawer {
+        transform: translateX(0);
+      }
+      .drawer-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 22px 24px 17px;
+        background: rgba(251, 248, 241, 0.97);
+        border-bottom: 1px solid var(--line);
+      }
+      .drawer-header h2 {
+        margin: 4px 0 0;
+        font: 500 28px/1.1 var(--serif);
+        letter-spacing: -0.025em;
+      }
+      .drawer-body {
+        padding: 21px 24px 112px;
+      }
+      .decision-lead {
+        display: flex;
+        gap: 11px;
+        padding: 12px 13px;
+        border-left: 3px solid var(--orange);
+        background: var(--orange-soft);
+        font-size: 11px;
+      }
+      .decision-lead .icon {
+        flex: 0 0 auto;
+        width: 17px;
+        height: 17px;
+        color: #8e451d;
+      }
+      .plan-compare {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        margin-top: 19px;
+        border: 1px solid var(--line);
+      }
+      .plan {
+        padding: 16px;
+        min-width: 0;
+      }
+      .plan + .plan {
+        border-left: 1px solid var(--line);
+        background: #edf3ee;
+      }
+      .plan-badge {
+        display: inline-block;
+        margin-bottom: 11px;
+        color: var(--muted);
+        font: 800 8px var(--mono);
+        letter-spacing: 0.1em;
+      }
+      .recommended .plan-badge {
+        color: var(--teal);
+      }
+      .plan h3 {
+        margin: 0 0 4px;
+        font: 500 17px/1.15 var(--serif);
+      }
+      .plan > p {
+        margin: 0 0 13px;
+        color: var(--muted);
+        font-size: 10px;
+        min-height: 30px;
+      }
+      .plan-datum {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-top: 1px solid rgba(106, 112, 109, 0.2);
+        gap: 8px;
+      }
+      .plan-datum span {
+        color: var(--muted);
+        font-size: 9px;
+      }
+      .plan-datum strong {
+        text-align: right;
+        font: 700 10px var(--mono);
+      }
+      .confidence {
+        color: var(--teal);
+      }
+      .tradeoff {
+        margin: 13px 0 21px;
+        padding: 11px 13px;
+        background: var(--ink);
+        color: var(--paper);
+        font-size: 11px;
+        line-height: 1.55;
+      }
+      .rationale h3,
+      .alternates h3,
+      .audit h3 {
+        margin: 0 0 10px;
+        font: 500 17px var(--serif);
+      }
+      .score-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        border: 1px solid var(--line);
+      }
+      .score {
+        padding: 10px 8px;
+        border-right: 1px solid var(--line);
+      }
+      .score:last-child {
+        border-right: 0;
+      }
+      .score span {
+        display: block;
+        color: var(--muted);
+        font-size: 8px;
+      }
+      .score strong {
+        font: 800 11px var(--mono);
+        color: var(--teal);
+      }
+      .score.negative strong {
+        color: var(--red);
+      }
+      .alternates {
+        margin-top: 21px;
+      }
+      .alternate {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 4px 12px;
+        padding: 10px 0;
+        border-top: 1px solid var(--line);
+      }
+      .alternate strong {
+        font-size: 10px;
+      }
+      .alternate .alt-score {
+        grid-row: 1/3;
+        grid-column: 2;
+        align-self: center;
+        font: 800 11px var(--mono);
+      }
+      .alternate small {
+        color: var(--muted);
+        font-size: 9px;
+      }
+      .audit {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+      }
+      .audit .icon {
+        flex: 0 0 auto;
+        color: var(--teal);
+      }
+      .audit h3 {
+        margin: 0 0 3px;
+        font-size: 14px;
+      }
+      .audit p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 9px;
+      }
+      .drawer-actions {
+        position: fixed;
+        z-index: 3;
+        right: 0;
+        bottom: 0;
+        width: min(570px, 100vw);
+        display: flex;
+        gap: 9px;
+        border-top: 1px solid var(--line);
+        background: var(--paper);
+        padding: 15px 24px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 40px;
+        border: 1px solid var(--ink);
+        border-radius: 4px;
+        padding: 9px 15px;
+        font-weight: 800;
+        font-size: 11px;
+      }
+      .btn.primary {
+        flex: 1;
+        background: var(--ink);
+        color: var(--paper);
+      }
+      .btn.primary:hover {
+        background: var(--teal);
+        border-color: var(--teal);
+      }
+      .btn.secondary {
+        background: transparent;
+      }
+      .btn.secondary:hover {
+        background: var(--paper-2);
+      }
 
-    .toast { position: fixed; z-index: 200; left: 50%; bottom: 24px; display: flex; align-items: center; gap: 9px; min-width: 290px; max-width: calc(100vw - 30px); background: var(--ink); color: var(--paper); border-left: 3px solid #70c4aa; padding: 12px 15px; box-shadow: 0 12px 30px rgba(0,0,0,.2); opacity: 0; pointer-events: none; transform: translate(-50%,15px); transition: .25s ease; font-size: 11px; }
-    .toast.show { opacity: 1; transform: translate(-50%,0); }
-    .toast .icon { color: #70c4aa; }
+      .toast {
+        position: fixed;
+        z-index: 200;
+        left: 50%;
+        bottom: 24px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-width: 290px;
+        max-width: calc(100vw - 30px);
+        background: var(--ink);
+        color: var(--paper);
+        border-left: 3px solid #70c4aa;
+        padding: 12px 15px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, 15px);
+        transition: 0.25s ease;
+        font-size: 11px;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+      .toast .icon {
+        color: #70c4aa;
+      }
 
-    @keyframes route { to { stroke-dashoffset: -17; } }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
-    }
+      @keyframes route {
+        to {
+          stroke-dashoffset: -17;
+        }
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+        }
+      }
 
-    @media (max-width: 1100px) {
-      .topbar { grid-template-columns: 1fr auto; }
-      .tenant-switch { display: none; }
-      .workspace-grid { grid-template-columns: 1.4fr minmax(330px,.8fr); }
-      .kpi { padding-inline: 13px; }
-      .facility-grid { grid-template-columns: repeat(2,1fr); row-gap: 16px; }
-      .lower-strip { grid-template-columns: 1.25fr .85fr; }
-    }
-    @media (max-width: 860px) {
-      .app-shell { display: block; padding-bottom: 66px; }
-      .topbar { height: 57px; padding: 0 14px; }
-      .module-label, .command { display: none; }
-      .rail { position: fixed; inset: auto 0 0 0; z-index: 60; height: 64px; display: block; border: 0; border-top: 1px solid #aaa092; padding: 5px 7px; }
-      .rail nav:first-child { height: 100%; }
-      .rail nav:last-child { display: none; }
-      .nav-list { height: 100%; grid-template-columns: repeat(6,1fr); gap: 2px; }
-      .nav-button { min-height: 53px; }
-      .nav-list li:nth-child(5) { display: none; }
-      main { padding: 20px 17px 30px; }
-      .workspace-grid { grid-template-columns: 1fr; }
-      .map-panel { height: 480px; }
-      .exceptions { border-left: 1px solid #c9c0b2; }
-      .exception-list { max-height: none; }
-      .lower-strip { grid-template-columns: 1fr; }
-      .facility-section { border-right: 0; border-bottom: 1px solid var(--line); }
-    }
-    @media (max-width: 650px) {
-      .context-row { align-items: flex-start; flex-direction: column; gap: 15px; }
-      .update-cluster { width: 100%; }
-      .updated { text-align: left; flex: 1; }
-      .kpi-band { grid-template-columns: repeat(2,1fr); border-radius: 5px 5px 0 0; }
-      .kpi { border-bottom: 1px solid rgba(255,255,255,.13); }
-      .kpi:nth-child(2), .kpi:nth-child(4) { border-right: 0; }
-      .kpi:last-child { grid-column: 1/-1; display: grid; grid-template-columns: 1fr auto; align-items: center; }
-      .kpi:last-child .kpi-label { grid-column: 1/-1; margin-bottom: 3px; }
-      .kpi:last-child .kpi-sub { display: none; }
-      .map-panel { height: 430px; }
-      .map-toolbar { align-items: flex-start; }
-      .map-meta { display: none; }
-      .network-map { transform: scale(1.18); }
-      .map-footer { gap: 10px; padding-inline: 11px; }
-      .node-stat { padding-left: 10px; }
-      .node-stat:last-child { display: none; }
-      .legend { bottom: 59px; }
-      .facility-grid { gap: 16px 13px; }
-      .plan-compare { grid-template-columns: 1fr; }
-      .plan + .plan { border-left: 0; border-top: 1px solid var(--line); }
-      .score-grid { grid-template-columns: repeat(3,1fr); }
-      .score:nth-child(3) { border-right: 0; }
-      .score:nth-child(n+4) { border-top: 1px solid var(--line); }
-      .drawer-header, .drawer-body { padding-left: 17px; padding-right: 17px; }
-      .drawer-actions { padding: 12px 17px; }
-    }
-    @media (max-width: 400px) {
-      main { padding-inline: 10px; }
-      .top-actions .icon-btn:first-of-type { display: none; }
-      .context-row h1 { font-size: 36px; }
-      .status-narrative { font-size: 13px; }
-      .kpi { padding: 14px 11px; }
-      .kpi-value { font-size: 22px; }
-      .segmented button { padding-inline: 9px; }
-      .facility-section, .timeline-section { padding: 17px 13px; }
-      .drawer-actions { flex-direction: column-reverse; }
-      .drawer-body { padding-bottom: 145px; }
-    }
-  </style>
-</head>
-<body>
-  <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
-    <symbol id="i-overview" viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Zm10 7h6v-9h-6v9ZM4 20h6v-3H4v3Zm10-13h6V4h-6v3Z"/></symbol>
-    <symbol id="i-box" viewBox="0 0 24 24"><path d="m4 7 8-4 8 4v10l-8 4-8-4V7Z"/><path d="m4 7 8 4 8-4M12 11v10"/></symbol>
-    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></symbol>
-    <symbol id="i-facility" viewBox="0 0 24 24"><path d="M3 21V9l6 3V7l6 4V3h6v18H3Z"/><path d="M7 17h1m4 0h1m4 0h1"/></symbol>
-    <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 6h11v11H3V6Zm11 4h4l3 4v3h-7v-7Z"/><path d="M7 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm11 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></symbol>
-    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 6h5a3 3 0 0 1 0 6h-1a3 3 0 0 0 0 6h6"/></symbol>
-    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3h4v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
-    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
-    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></symbol>
-    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 6"/><path d="M20 4v7h-7"/></symbol>
-    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
-    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v4m0 3h.01"/></symbol>
-    <symbol id="i-temp" viewBox="0 0 24 24"><path d="M14 14.8V5a3 3 0 0 0-6 0v9.8a5 5 0 1 0 6 0Z"/><path d="M11 7v9"/></symbol>
-    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
-    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M3 8a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0m-9 4a4 4 0 0 1 6 0m-3 4h.01"/></symbol>
-    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
-    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
-    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></symbol>
-    <symbol id="i-orders" viewBox="0 0 24 24"><path d="M6 3h12v18H6V3Z"/><path d="M9 8h6m-6 4h6m-6 4h4"/></symbol>
-    <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0H4Z"/><path d="m12 14 4-5"/></symbol>
-    <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M19 4C10 4 5 8 5 14c0 3 2 5 5 5 6 0 9-6 9-15Z"/><path d="M5 21c2-6 6-9 11-12"/></symbol>
-  </svg>
+      @media (max-width: 1100px) {
+        .topbar {
+          grid-template-columns: 1fr auto;
+        }
+        .tenant-switch {
+          display: none;
+        }
+        .workspace-grid {
+          grid-template-columns: 1.4fr minmax(330px, 0.8fr);
+        }
+        .kpi {
+          padding-inline: 13px;
+        }
+        .facility-grid {
+          grid-template-columns: repeat(2, 1fr);
+          row-gap: 16px;
+        }
+        .lower-strip {
+          grid-template-columns: 1.25fr 0.85fr;
+        }
+      }
+      @media (max-width: 860px) {
+        .app-shell {
+          display: block;
+          padding-bottom: 66px;
+        }
+        .topbar {
+          height: 57px;
+          padding: 0 14px;
+        }
+        .module-label,
+        .command {
+          display: none;
+        }
+        .rail {
+          position: fixed;
+          inset: auto 0 0 0;
+          z-index: 60;
+          height: 64px;
+          display: block;
+          border: 0;
+          border-top: 1px solid #aaa092;
+          padding: 5px 7px;
+        }
+        .rail nav:first-child {
+          height: 100%;
+        }
+        .rail nav:last-child {
+          display: none;
+        }
+        .nav-list {
+          height: 100%;
+          grid-template-columns: repeat(6, 1fr);
+          gap: 2px;
+        }
+        .nav-button {
+          min-height: 53px;
+        }
+        .nav-list li:nth-child(5) {
+          display: none;
+        }
+        main {
+          padding: 20px 17px 30px;
+        }
+        .workspace-grid {
+          grid-template-columns: 1fr;
+        }
+        .map-panel {
+          height: 480px;
+        }
+        .exceptions {
+          border-left: 1px solid #c9c0b2;
+        }
+        .exception-list {
+          max-height: none;
+        }
+        .lower-strip {
+          grid-template-columns: 1fr;
+        }
+        .facility-section {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+      }
+      @media (max-width: 650px) {
+        .context-row {
+          align-items: flex-start;
+          flex-direction: column;
+          gap: 15px;
+        }
+        .update-cluster {
+          width: 100%;
+        }
+        .updated {
+          text-align: left;
+          flex: 1;
+        }
+        .kpi-band {
+          grid-template-columns: repeat(2, 1fr);
+          border-radius: 5px 5px 0 0;
+        }
+        .kpi {
+          border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+        }
+        .kpi:nth-child(2),
+        .kpi:nth-child(4) {
+          border-right: 0;
+        }
+        .kpi:last-child {
+          grid-column: 1/-1;
+          display: grid;
+          grid-template-columns: 1fr auto;
+          align-items: center;
+        }
+        .kpi:last-child .kpi-label {
+          grid-column: 1/-1;
+          margin-bottom: 3px;
+        }
+        .kpi:last-child .kpi-sub {
+          display: none;
+        }
+        .map-panel {
+          height: 430px;
+        }
+        .map-toolbar {
+          align-items: flex-start;
+        }
+        .map-meta {
+          display: none;
+        }
+        .network-map {
+          transform: scale(1.18);
+        }
+        .map-footer {
+          gap: 10px;
+          padding-inline: 11px;
+        }
+        .node-stat {
+          padding-left: 10px;
+        }
+        .node-stat:last-child {
+          display: none;
+        }
+        .legend {
+          bottom: 59px;
+        }
+        .facility-grid {
+          gap: 16px 13px;
+        }
+        .plan-compare {
+          grid-template-columns: 1fr;
+        }
+        .plan + .plan {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+        .score-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+        .score:nth-child(3) {
+          border-right: 0;
+        }
+        .score:nth-child(n + 4) {
+          border-top: 1px solid var(--line);
+        }
+        .drawer-header,
+        .drawer-body {
+          padding-left: 17px;
+          padding-right: 17px;
+        }
+        .drawer-actions {
+          padding: 12px 17px;
+        }
+      }
+      @media (max-width: 400px) {
+        main {
+          padding-inline: 10px;
+        }
+        .top-actions .icon-btn:first-of-type {
+          display: none;
+        }
+        .context-row h1 {
+          font-size: 36px;
+        }
+        .status-narrative {
+          font-size: 13px;
+        }
+        .kpi {
+          padding: 14px 11px;
+        }
+        .kpi-value {
+          font-size: 22px;
+        }
+        .segmented button {
+          padding-inline: 9px;
+        }
+        .facility-section,
+        .timeline-section {
+          padding: 17px 13px;
+        }
+        .drawer-actions {
+          flex-direction: column-reverse;
+        }
+        .drawer-body {
+          padding-bottom: 145px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg aria-hidden="true" style="position: absolute; width: 0; height: 0; overflow: hidden">
+      <symbol id="i-overview" viewBox="0 0 24 24">
+        <path d="M4 13h6V4H4v9Zm10 7h6v-9h-6v9ZM4 20h6v-3H4v3Zm10-13h6V4h-6v3Z" />
+      </symbol>
+      <symbol id="i-box" viewBox="0 0 24 24">
+        <path d="m4 7 8-4 8 4v10l-8 4-8-4V7Z" />
+        <path d="m4 7 8 4 8-4M12 11v10" />
+      </symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24">
+        <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+        <path d="m3 12 9 5 9-5M3 16l9 5 9-5" />
+      </symbol>
+      <symbol id="i-facility" viewBox="0 0 24 24">
+        <path d="M3 21V9l6 3V7l6 4V3h6v18H3Z" />
+        <path d="M7 17h1m4 0h1m4 0h1" />
+      </symbol>
+      <symbol id="i-truck" viewBox="0 0 24 24">
+        <path d="M3 6h11v11H3V6Zm11 4h4l3 4v3h-7v-7Z" />
+        <path d="M7 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm11 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+      </symbol>
+      <symbol id="i-route" viewBox="0 0 24 24">
+        <circle cx="5" cy="6" r="2" />
+        <circle cx="19" cy="18" r="2" />
+        <path d="M7 6h5a3 3 0 0 1 0 6h-1a3 3 0 0 0 0 6h6" />
+      </symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="3" />
+        <path
+          d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21h-4v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3v-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V3h4v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.5 1Z"
+        />
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-4-4" />
+      </symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24">
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" />
+      </symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24">
+        <path d="M20 11a8 8 0 1 0-2.3 6" />
+        <path d="M20 4v7h-7" />
+      </symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24">
+        <path d="M12 3 2.5 20h19L12 3Z" />
+        <path d="M12 9v4m0 3h.01" />
+      </symbol>
+      <symbol id="i-temp" viewBox="0 0 24 24">
+        <path d="M14 14.8V5a3 3 0 0 0-6 0v9.8a5 5 0 1 0 6 0Z" />
+        <path d="M11 7v9" />
+      </symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </symbol>
+      <symbol id="i-wifi" viewBox="0 0 24 24">
+        <path d="M3 8a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0m-9 4a4 4 0 0 1 6 0m-3 4h.01" />
+      </symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24">
+        <path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z" />
+        <path d="m8.5 12 2.2 2.2 4.8-5" />
+      </symbol>
+      <symbol id="i-orders" viewBox="0 0 24 24">
+        <path d="M6 3h12v18H6V3Z" />
+        <path d="M9 8h6m-6 4h6m-6 4h4" />
+      </symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24">
+        <path d="M4 18a9 9 0 1 1 16 0H4Z" />
+        <path d="m12 14 4-5" />
+      </symbol>
+      <symbol id="i-leaf" viewBox="0 0 24 24">
+        <path d="M19 4C10 4 5 8 5 14c0 3 2 5 5 5 6 0 9-6 9-15Z" />
+        <path d="M5 21c2-6 6-9 11-12" />
+      </symbol>
+    </svg>
 
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">
-          <svg class="compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="m15.8 8.2-2.1 5.5-5.5 2.1 2.1-5.5 5.5-2.1Z" fill="currentColor"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3"/></svg>
-          <span>Northstar</span>
-        </div>
-        <span class="module-label">CONTROL TOWER</span>
-      </div>
-      <button class="tenant-switch" aria-label="Switch tenant and network">
-        <svg class="icon"><use href="#i-layers"/></svg>
-        <span class="stack"><strong>Orion Retail</strong><small>EMEA NETWORK</small></span>
-        <svg class="icon" style="width:14px;transform:rotate(90deg)"><use href="#i-chevron"/></svg>
-      </button>
-      <div class="top-actions">
-        <button class="command" id="commandBtn"><svg class="icon"><use href="#i-search"/></svg><span>Search or run command</span><kbd>⌘ K</kbd></button>
-        <button class="icon-btn" aria-label="Help"><svg class="icon"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.5 2.5 0 1 1 3.2 2.4c-.7.3-.9.8-.9 1.6m0 3h.01"/></svg></button>
-        <button class="icon-btn" aria-label="Notifications, 3 unread"><svg class="icon"><use href="#i-bell"/></svg><span class="notify-dot"></span></button>
-        <div class="avatar" aria-label="Operator Anika Meyer">AM</div>
-      </div>
-    </header>
-
-    <aside class="rail" aria-label="Primary navigation">
-      <nav><ul class="nav-list">
-        <li><button class="nav-button active" data-nav="Overview" aria-current="page"><svg class="icon"><use href="#i-overview"/></svg><span>Overview</span></button></li>
-        <li><button class="nav-button" data-nav="Shipments"><svg class="icon"><use href="#i-box"/></svg><span>Shipments</span></button></li>
-        <li><button class="nav-button" data-nav="Inventory"><svg class="icon"><use href="#i-layers"/></svg><span>Inventory</span></button></li>
-        <li><button class="nav-button" data-nav="Facilities"><svg class="icon"><use href="#i-facility"/></svg><span>Facilities</span></button></li>
-        <li><button class="nav-button" data-nav="Carriers"><svg class="icon"><use href="#i-truck"/></svg><span>Carriers</span></button></li>
-        <li><button class="nav-button" data-nav="Scenarios"><svg class="icon"><use href="#i-route"/></svg><span>Scenarios</span></button></li>
-      </ul></nav>
-      <nav><ul class="nav-list"><li><button class="nav-button" data-nav="Settings"><svg class="icon"><use href="#i-settings"/></svg><span>Settings</span></button></li></ul></nav>
-    </aside>
-
-    <main>
-      <div class="content">
-        <section class="context-row" aria-labelledby="pageTitle">
-          <div>
-            <div class="breadcrumbs"><span>OVERVIEW</span><span>/</span><span>NETWORK OVERVIEW</span></div>
-            <h1 id="pageTitle">Network pulse</h1>
-            <p class="status-narrative"><strong>92.4% of orders are moving to promise.</strong> <span id="decisionText">Six exceptions need a decision.</span></p>
-          </div>
-          <div class="update-cluster">
-            <span class="live-dot" aria-hidden="true"></span>
-            <div class="updated"><strong id="timestamp">TUE, 21 JUL · 09:42 TRT</strong><small id="syncState">Network state synchronized</small></div>
-            <button class="refresh-btn" id="refreshBtn"><svg class="icon"><use href="#i-refresh"/></svg><span>Refresh</span></button>
-          </div>
-        </section>
-
-        <section class="kpi-band" aria-label="Network key performance indicators">
-          <article class="kpi"><div class="kpi-label"><svg class="icon"><use href="#i-orders"/></svg>Orders in motion</div><div class="kpi-main"><span class="kpi-value tabular">12,840</span><span class="delta good">↑ 8.2%</span></div><div class="kpi-sub">vs. 7-day baseline</div></article>
-          <article class="kpi"><div class="kpi-label"><svg class="icon"><use href="#i-check"/></svg>On-time delivery</div><div class="kpi-main"><span class="kpi-value tabular">92.4%</span><span class="delta bad">↓ 1.6 pts</span></div><div class="kpi-sub">promise confidence</div></article>
-          <article class="kpi"><div class="kpi-label"><svg class="icon"><use href="#i-alert"/></svg>At-risk revenue</div><div class="kpi-main"><span class="kpi-value tabular">€184.2k</span><span class="delta warn">38 orders</span></div><div class="kpi-sub">within next 48 hours</div></article>
-          <article class="kpi"><div class="kpi-label"><svg class="icon"><use href="#i-gauge"/></svg>Capacity used</div><div class="kpi-main"><span class="kpi-value tabular">78%</span><span class="delta warn">↑ 5 pts</span></div><div class="kpi-sub">network weighted</div></article>
-          <article class="kpi"><div class="kpi-label"><svg class="icon"><use href="#i-leaf"/></svg>Carbon / shipment</div><div class="kpi-main"><span class="kpi-value tabular">1.82 kg</span><span class="delta good">↓ 12%</span></div><div class="kpi-sub">CO₂e intensity</div></article>
-        </section>
-
-        <div class="workspace-grid">
-          <section class="map-panel" aria-labelledby="mapTitle">
-            <h2 id="mapTitle" class="sr-only">EMEA network map</h2>
-            <div class="map-toolbar">
-              <div class="segmented" role="tablist" aria-label="Map layer">
-                <button class="active" role="tab" aria-selected="true" data-view="network">Network</button>
-                <button role="tab" aria-selected="false" data-view="shipments">Shipments</button>
-                <button role="tab" aria-selected="false" data-view="weather">Weather</button>
-              </div>
-              <div class="map-meta"><span>38.4°N / 22.1°E</span><span>•</span><span>LIVE ROUTES 214</span></div>
-            </div>
-            <svg class="network-map" id="networkMap" viewBox="0 0 820 500" role="img" aria-label="Schematic map showing routes between Rotterdam, Hamburg, Warsaw, Milan, Istanbul and Dubai">
-              <path class="land" d="M54 59 147 35l98 32 84-18 85 33 88-10 74 48-3 45-45 26-32 50-76 9-50 70-74 26-74-37-40-73-58-29-41-70-45-26 16-62Z"/>
-              <path class="land" d="m501 245 60-42 89 8 54 59-16 58 47 35-30 77-111 12-73-52-42-76 22-79Z"/>
-              <path class="land" d="m713 340 45 8 29 44-22 55-43-12-24-47 15-48Z"/>
-              <path class="minor-route" d="M177 125 Q235 77 288 114"/>
-              <path class="minor-route" d="M288 114 Q386 66 465 125"/>
-              <path class="watch-route" d="M465 125 Q431 221 349 282"/>
-              <path class="minor-route" d="M349 282 Q472 311 576 278"/>
-              <path class="minor-route" d="M576 278 Q676 315 727 403"/>
-              <path class="minor-route" d="M288 114 Q466 134 576 278"/>
-              <path class="risk-halo" d="M177 125 Q375 109 576 278"/>
-              <path class="risk-route" d="M177 125 Q375 109 576 278"/>
-              <path class="route-arrow" d="m411 160-12-3 7-10Z"/>
-              <g class="route-tag" transform="translate(337 124)"><rect width="95" height="25"/><text x="8" y="11">RTM → IST · RISK</text><text x="8" y="20">18 PRIORITY ORDERS</text></g>
-              <g class="weather-symbol" transform="translate(217 71)"><circle cx="0" cy="0" r="13"/><path d="M-7 2h12a4 4 0 0 0-2-7 6 6 0 0 0-11 3"/></g>
-              <g class="weather-symbol" transform="translate(490 74)"><circle cx="0" cy="0" r="13"/><path d="M-6 4h11M-3-3l-2 4m7-4L0 1"/></g>
-              <g class="weather-symbol" transform="translate(626 246)"><circle cx="0" cy="0" r="13"/><path d="M-4-4 4 4M4-4-4 4"/></g>
-              <g class="node selected" data-node="Rotterdam" tabindex="0" role="button" aria-label="Rotterdam, critical status" transform="translate(177 125)"><circle class="target" r="21"/><circle class="halo" r="13" fill="#a53e38"/><circle class="core" r="6" fill="#a53e38"/><text x="-44" y="-15">Rotterdam</text><text class="node-state" x="-44" y="-5">CRITICAL · 96%</text></g>
-              <g class="node" data-node="Hamburg" tabindex="0" role="button" aria-label="Hamburg, watch status" transform="translate(288 114)"><circle class="target" r="21"/><circle class="halo" r="13" fill="#c4662b"/><circle class="core" r="6" fill="#c4662b"/><text x="-28" y="28">Hamburg</text><text class="node-state" x="-28" y="38">WATCH · 82%</text></g>
-              <g class="node" data-node="Warsaw" tabindex="0" role="button" aria-label="Warsaw, watch status" transform="translate(465 125)"><circle class="target" r="21"/><circle class="halo" r="13" fill="#c4662b"/><circle class="core" r="6" fill="#c4662b"/><text x="12" y="-10">Warsaw</text><text class="node-state" x="12" y="0">WATCH · 88%</text></g>
-              <g class="node" data-node="Milan" tabindex="0" role="button" aria-label="Milan, watch status" transform="translate(349 282)"><circle class="target" r="21"/><circle class="halo" r="13" fill="#c4662b"/><circle class="core" r="6" fill="#c4662b"/><text x="-44" y="-13">Milan</text><text class="node-state" x="-44" y="-3">WATCH · 74%</text></g>
-              <g class="node" data-node="Istanbul" tabindex="0" role="button" aria-label="Istanbul, critical status" transform="translate(576 278)"><circle class="target" r="21"/><circle class="halo" r="13" fill="#a53e38"/><circle class="core" r="6" fill="#a53e38"/><text x="12" y="-8">Istanbul</text><text class="node-state" x="12" y="2">CRITICAL · 91%</text></g>
-              <g class="node" data-node="Dubai" tabindex="0" role="button" aria-label="Dubai, healthy status" transform="translate(727 403)"><circle class="target" r="21"/><circle class="halo" r="13" fill="#176b63"/><circle class="core" r="6" fill="#176b63"/><text x="-51" y="-10">Dubai</text><text class="node-state" x="-51" y="0">HEALTHY · 68%</text></g>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg
+              class="compass"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="m15.8 8.2-2.1 5.5-5.5 2.1 2.1-5.5 5.5-2.1Z" fill="currentColor" />
+              <path d="M12 1v3m0 16v3M1 12h3m16 0h3" />
             </svg>
-            <div class="legend" aria-label="Status legend"><span><i style="background:var(--teal)"></i>Healthy</span><span><i style="background:var(--orange)"></i>Watch</span><span><i style="background:var(--red)"></i>Critical</span></div>
-            <div class="map-footer" aria-live="polite">
-              <div class="node-title"><strong id="nodeName">Rotterdam</strong><span id="nodeCode">NLRTM · 51.92°N</span></div>
-              <div class="node-stat"><strong id="nodeFlow">3,140</strong><span>orders in flow</span></div>
-              <div class="node-stat"><strong id="nodeUtil">96%</strong><span>capacity used</span></div>
-              <div class="node-stat"><strong id="nodeIssue" style="color:var(--red)">2 critical</strong><span>open signals</span></div>
+            <span>Northstar</span>
+          </div>
+          <span class="module-label">CONTROL TOWER</span>
+        </div>
+        <button class="tenant-switch" aria-label="Switch tenant and network">
+          <svg class="icon"><use href="#i-layers" /></svg>
+          <span class="stack"><strong>Orion Retail</strong><small>EMEA NETWORK</small></span>
+          <svg class="icon" style="width: 14px; transform: rotate(90deg)">
+            <use href="#i-chevron" />
+          </svg>
+        </button>
+        <div class="top-actions">
+          <button class="command" id="commandBtn">
+            <svg class="icon"><use href="#i-search" /></svg><span>Search or run command</span
+            ><kbd>⌘ K</kbd>
+          </button>
+          <button class="icon-btn" aria-label="Help">
+            <svg class="icon">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M9.7 9a2.5 2.5 0 1 1 3.2 2.4c-.7.3-.9.8-.9 1.6m0 3h.01" />
+            </svg>
+          </button>
+          <button class="icon-btn" aria-label="Notifications, 3 unread">
+            <svg class="icon"><use href="#i-bell" /></svg><span class="notify-dot"></span>
+          </button>
+          <div class="avatar" aria-label="Operator Anika Meyer">AM</div>
+        </div>
+      </header>
+
+      <aside class="rail" aria-label="Primary navigation">
+        <nav>
+          <ul class="nav-list">
+            <li>
+              <button class="nav-button active" data-nav="Overview" aria-current="page">
+                <svg class="icon"><use href="#i-overview" /></svg><span>Overview</span>
+              </button>
+            </li>
+            <li>
+              <button class="nav-button" data-nav="Shipments">
+                <svg class="icon"><use href="#i-box" /></svg><span>Shipments</span>
+              </button>
+            </li>
+            <li>
+              <button class="nav-button" data-nav="Inventory">
+                <svg class="icon"><use href="#i-layers" /></svg><span>Inventory</span>
+              </button>
+            </li>
+            <li>
+              <button class="nav-button" data-nav="Facilities">
+                <svg class="icon"><use href="#i-facility" /></svg><span>Facilities</span>
+              </button>
+            </li>
+            <li>
+              <button class="nav-button" data-nav="Carriers">
+                <svg class="icon"><use href="#i-truck" /></svg><span>Carriers</span>
+              </button>
+            </li>
+            <li>
+              <button class="nav-button" data-nav="Scenarios">
+                <svg class="icon"><use href="#i-route" /></svg><span>Scenarios</span>
+              </button>
+            </li>
+          </ul>
+        </nav>
+        <nav>
+          <ul class="nav-list">
+            <li>
+              <button class="nav-button" data-nav="Settings">
+                <svg class="icon"><use href="#i-settings" /></svg><span>Settings</span>
+              </button>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+
+      <main>
+        <div class="content">
+          <section class="context-row" aria-labelledby="pageTitle">
+            <div>
+              <div class="breadcrumbs">
+                <span>OVERVIEW</span><span>/</span><span>NETWORK OVERVIEW</span>
+              </div>
+              <h1 id="pageTitle">Network pulse</h1>
+              <p class="status-narrative">
+                <strong>92.4% of orders are moving to promise.</strong>
+                <span id="decisionText">Six exceptions need a decision.</span>
+              </p>
+            </div>
+            <div class="update-cluster">
+              <span class="live-dot" aria-hidden="true"></span>
+              <div class="updated">
+                <strong id="timestamp">TUE, 21 JUL · 09:42 TRT</strong
+                ><small id="syncState">Network state synchronized</small>
+              </div>
+              <button class="refresh-btn" id="refreshBtn">
+                <svg class="icon"><use href="#i-refresh" /></svg><span>Refresh</span>
+              </button>
             </div>
           </section>
 
-          <section class="exceptions" aria-labelledby="exceptionsTitle">
-            <div class="queue-head"><div><p class="eyebrow">ACTION QUEUE</p><h2 id="exceptionsTitle">Open exceptions</h2></div><span class="queue-count" id="queueCount" aria-label="6 open exceptions">6</span></div>
-            <div class="filters" role="group" aria-label="Filter exceptions by severity">
-              <button class="filter-btn active" data-filter="all">All <span class="filter-count">6</span></button>
-              <button class="filter-btn" data-filter="critical">Critical <span class="filter-count">2</span></button>
-              <button class="filter-btn" data-filter="watch">Watch <span class="filter-count">4</span></button>
+          <section class="kpi-band" aria-label="Network key performance indicators">
+            <article class="kpi">
+              <div class="kpi-label">
+                <svg class="icon"><use href="#i-orders" /></svg>Orders in motion
+              </div>
+              <div class="kpi-main">
+                <span class="kpi-value tabular">12,840</span><span class="delta good">↑ 8.2%</span>
+              </div>
+              <div class="kpi-sub">vs. 7-day baseline</div>
+            </article>
+            <article class="kpi">
+              <div class="kpi-label">
+                <svg class="icon"><use href="#i-check" /></svg>On-time delivery
+              </div>
+              <div class="kpi-main">
+                <span class="kpi-value tabular">92.4%</span><span class="delta bad">↓ 1.6 pts</span>
+              </div>
+              <div class="kpi-sub">promise confidence</div>
+            </article>
+            <article class="kpi">
+              <div class="kpi-label">
+                <svg class="icon"><use href="#i-alert" /></svg>At-risk revenue
+              </div>
+              <div class="kpi-main">
+                <span class="kpi-value tabular">€184.2k</span
+                ><span class="delta warn">38 orders</span>
+              </div>
+              <div class="kpi-sub">within next 48 hours</div>
+            </article>
+            <article class="kpi">
+              <div class="kpi-label">
+                <svg class="icon"><use href="#i-gauge" /></svg>Capacity used
+              </div>
+              <div class="kpi-main">
+                <span class="kpi-value tabular">78%</span><span class="delta warn">↑ 5 pts</span>
+              </div>
+              <div class="kpi-sub">network weighted</div>
+            </article>
+            <article class="kpi">
+              <div class="kpi-label">
+                <svg class="icon"><use href="#i-leaf" /></svg>Carbon / shipment
+              </div>
+              <div class="kpi-main">
+                <span class="kpi-value tabular">1.82 kg</span><span class="delta good">↓ 12%</span>
+              </div>
+              <div class="kpi-sub">CO₂e intensity</div>
+            </article>
+          </section>
+
+          <div class="workspace-grid">
+            <section class="map-panel" aria-labelledby="mapTitle">
+              <h2 id="mapTitle" class="sr-only">EMEA network map</h2>
+              <div class="map-toolbar">
+                <div class="segmented" role="tablist" aria-label="Map layer">
+                  <button class="active" role="tab" aria-selected="true" data-view="network">
+                    Network
+                  </button>
+                  <button role="tab" aria-selected="false" data-view="shipments">Shipments</button>
+                  <button role="tab" aria-selected="false" data-view="weather">Weather</button>
+                </div>
+                <div class="map-meta">
+                  <span>38.4°N / 22.1°E</span><span>•</span><span>LIVE ROUTES 214</span>
+                </div>
+              </div>
+              <svg
+                class="network-map"
+                id="networkMap"
+                viewBox="0 0 820 500"
+                role="img"
+                aria-label="Schematic map showing routes between Rotterdam, Hamburg, Warsaw, Milan, Istanbul and Dubai"
+              >
+                <path
+                  class="land"
+                  d="M54 59 147 35l98 32 84-18 85 33 88-10 74 48-3 45-45 26-32 50-76 9-50 70-74 26-74-37-40-73-58-29-41-70-45-26 16-62Z"
+                />
+                <path
+                  class="land"
+                  d="m501 245 60-42 89 8 54 59-16 58 47 35-30 77-111 12-73-52-42-76 22-79Z"
+                />
+                <path class="land" d="m713 340 45 8 29 44-22 55-43-12-24-47 15-48Z" />
+                <path class="minor-route" d="M177 125 Q235 77 288 114" />
+                <path class="minor-route" d="M288 114 Q386 66 465 125" />
+                <path class="watch-route" d="M465 125 Q431 221 349 282" />
+                <path class="minor-route" d="M349 282 Q472 311 576 278" />
+                <path class="minor-route" d="M576 278 Q676 315 727 403" />
+                <path class="minor-route" d="M288 114 Q466 134 576 278" />
+                <path class="risk-halo" d="M177 125 Q375 109 576 278" />
+                <path class="risk-route" d="M177 125 Q375 109 576 278" />
+                <path class="route-arrow" d="m411 160-12-3 7-10Z" />
+                <g class="route-tag" transform="translate(337 124)">
+                  <rect width="95" height="25" />
+                  <text x="8" y="11">RTM → IST · RISK</text>
+                  <text x="8" y="20">18 PRIORITY ORDERS</text>
+                </g>
+                <g class="weather-symbol" transform="translate(217 71)">
+                  <circle cx="0" cy="0" r="13" />
+                  <path d="M-7 2h12a4 4 0 0 0-2-7 6 6 0 0 0-11 3" />
+                </g>
+                <g class="weather-symbol" transform="translate(490 74)">
+                  <circle cx="0" cy="0" r="13" />
+                  <path d="M-6 4h11M-3-3l-2 4m7-4L0 1" />
+                </g>
+                <g class="weather-symbol" transform="translate(626 246)">
+                  <circle cx="0" cy="0" r="13" />
+                  <path d="M-4-4 4 4M4-4-4 4" />
+                </g>
+                <g
+                  class="node selected"
+                  data-node="Rotterdam"
+                  tabindex="0"
+                  role="button"
+                  aria-label="Rotterdam, critical status"
+                  transform="translate(177 125)"
+                >
+                  <circle class="target" r="21" />
+                  <circle class="halo" r="13" fill="#a53e38" />
+                  <circle class="core" r="6" fill="#a53e38" />
+                  <text x="-44" y="-15">Rotterdam</text>
+                  <text class="node-state" x="-44" y="-5">CRITICAL · 96%</text>
+                </g>
+                <g
+                  class="node"
+                  data-node="Hamburg"
+                  tabindex="0"
+                  role="button"
+                  aria-label="Hamburg, watch status"
+                  transform="translate(288 114)"
+                >
+                  <circle class="target" r="21" />
+                  <circle class="halo" r="13" fill="#c4662b" />
+                  <circle class="core" r="6" fill="#c4662b" />
+                  <text x="-28" y="28">Hamburg</text>
+                  <text class="node-state" x="-28" y="38">WATCH · 82%</text>
+                </g>
+                <g
+                  class="node"
+                  data-node="Warsaw"
+                  tabindex="0"
+                  role="button"
+                  aria-label="Warsaw, watch status"
+                  transform="translate(465 125)"
+                >
+                  <circle class="target" r="21" />
+                  <circle class="halo" r="13" fill="#c4662b" />
+                  <circle class="core" r="6" fill="#c4662b" />
+                  <text x="12" y="-10">Warsaw</text>
+                  <text class="node-state" x="12" y="0">WATCH · 88%</text>
+                </g>
+                <g
+                  class="node"
+                  data-node="Milan"
+                  tabindex="0"
+                  role="button"
+                  aria-label="Milan, watch status"
+                  transform="translate(349 282)"
+                >
+                  <circle class="target" r="21" />
+                  <circle class="halo" r="13" fill="#c4662b" />
+                  <circle class="core" r="6" fill="#c4662b" />
+                  <text x="-44" y="-13">Milan</text>
+                  <text class="node-state" x="-44" y="-3">WATCH · 74%</text>
+                </g>
+                <g
+                  class="node"
+                  data-node="Istanbul"
+                  tabindex="0"
+                  role="button"
+                  aria-label="Istanbul, critical status"
+                  transform="translate(576 278)"
+                >
+                  <circle class="target" r="21" />
+                  <circle class="halo" r="13" fill="#a53e38" />
+                  <circle class="core" r="6" fill="#a53e38" />
+                  <text x="12" y="-8">Istanbul</text>
+                  <text class="node-state" x="12" y="2">CRITICAL · 91%</text>
+                </g>
+                <g
+                  class="node"
+                  data-node="Dubai"
+                  tabindex="0"
+                  role="button"
+                  aria-label="Dubai, healthy status"
+                  transform="translate(727 403)"
+                >
+                  <circle class="target" r="21" />
+                  <circle class="halo" r="13" fill="#176b63" />
+                  <circle class="core" r="6" fill="#176b63" />
+                  <text x="-51" y="-10">Dubai</text>
+                  <text class="node-state" x="-51" y="0">HEALTHY · 68%</text>
+                </g>
+              </svg>
+              <div class="legend" aria-label="Status legend">
+                <span><i style="background: var(--teal)"></i>Healthy</span
+                ><span><i style="background: var(--orange)"></i>Watch</span
+                ><span><i style="background: var(--red)"></i>Critical</span>
+              </div>
+              <div class="map-footer" aria-live="polite">
+                <div class="node-title">
+                  <strong id="nodeName">Rotterdam</strong><span id="nodeCode">NLRTM · 51.92°N</span>
+                </div>
+                <div class="node-stat">
+                  <strong id="nodeFlow">3,140</strong><span>orders in flow</span>
+                </div>
+                <div class="node-stat">
+                  <strong id="nodeUtil">96%</strong><span>capacity used</span>
+                </div>
+                <div class="node-stat">
+                  <strong id="nodeIssue" style="color: var(--red)">2 critical</strong
+                  ><span>open signals</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="exceptions" aria-labelledby="exceptionsTitle">
+              <div class="queue-head">
+                <div>
+                  <p class="eyebrow">ACTION QUEUE</p>
+                  <h2 id="exceptionsTitle">Open exceptions</h2>
+                </div>
+                <span class="queue-count" id="queueCount" aria-label="6 open exceptions">6</span>
+              </div>
+              <div class="filters" role="group" aria-label="Filter exceptions by severity">
+                <button class="filter-btn active" data-filter="all">
+                  All <span class="filter-count">6</span>
+                </button>
+                <button class="filter-btn" data-filter="critical">
+                  Critical <span class="filter-count">2</span>
+                </button>
+                <button class="filter-btn" data-filter="watch">
+                  Watch <span class="filter-count">4</span>
+                </button>
+              </div>
+              <ul class="exception-list" id="exceptionList">
+                <li class="exception-row critical" data-severity="critical" data-id="EXC-2051">
+                  <button class="exception-main">
+                    <span class="severity-icon"
+                      ><svg class="icon"><use href="#i-alert" /></svg></span
+                    ><span class="exception-copy"
+                      ><span class="severity-label">Critical · Customs</span
+                      ><strong>Customs hold in Istanbul</strong
+                      ><small>6 orders · IST bonded zone · +19h</small></span
+                    ><span class="exception-impact"
+                      ><strong>€82.4k</strong><small>+19H</small></span
+                    >
+                  </button>
+                </li>
+                <li
+                  class="exception-row critical selected"
+                  data-severity="critical"
+                  data-id="EXC-2048"
+                >
+                  <button class="exception-main">
+                    <span class="severity-icon"
+                      ><svg class="icon"><use href="#i-truck" /></svg></span
+                    ><span class="exception-copy"
+                      ><span class="severity-label">Critical · Capacity</span
+                      ><strong>Rotterdam → Istanbul shortfall</strong
+                      ><small>18 priority orders · Argo Freight · +31h</small></span
+                    ><span class="exception-impact"
+                      ><strong>€46.8k</strong><small>+31H</small></span
+                    ></button
+                  ><button class="review-link" id="reviewDecision">Review decision →</button>
+                </li>
+                <li class="exception-row watch" data-severity="watch" data-id="EXC-2046">
+                  <button class="exception-main">
+                    <span class="severity-icon"
+                      ><svg class="icon"><use href="#i-temp" /></svg></span
+                    ><span class="exception-copy"
+                      ><span class="severity-label">Watch · Cold chain</span
+                      ><strong>Temperature drift in Milan</strong
+                      ><small>2 loads · MXP reefer hub · +4h</small></span
+                    ><span class="exception-impact"><strong>€21.6k</strong><small>+4H</small></span>
+                  </button>
+                </li>
+                <li class="exception-row watch" data-severity="watch" data-id="EXC-2042">
+                  <button class="exception-main">
+                    <span class="severity-icon"
+                      ><svg class="icon"><use href="#i-clock" /></svg></span
+                    ><span class="exception-copy"
+                      ><span class="severity-label">Watch · Fulfilment</span
+                      ><strong>Warsaw pick delay</strong
+                      ><small>9 orders · WAW-02 · +3h 20m</small></span
+                    ><span class="exception-impact"><strong>€14.9k</strong><small>+3H</small></span>
+                  </button>
+                </li>
+                <li class="exception-row watch" data-severity="watch" data-id="EXC-2039">
+                  <button class="exception-main">
+                    <span class="severity-icon"
+                      ><svg class="icon"><use href="#i-box" /></svg></span
+                    ><span class="exception-copy"
+                      ><span class="severity-label">Watch · Last mile</span
+                      ><strong>Failed delivery cluster in Hamburg</strong
+                      ><small>11 drops · postcode 20457 · +1 day</small></span
+                    ><span class="exception-impact"><strong>€10.7k</strong><small>+1D</small></span>
+                  </button>
+                </li>
+                <li class="exception-row watch" data-severity="watch" data-id="EXC-2036">
+                  <button class="exception-main">
+                    <span class="severity-icon"
+                      ><svg class="icon"><use href="#i-wifi" /></svg></span
+                    ><span class="exception-copy"
+                      ><span class="severity-label">Watch · Integration</span
+                      ><strong>Carrier API lag</strong
+                      ><small>Orbit Line · 143 stale milestones · 22m</small></span
+                    ><span class="exception-impact"><strong>€7.8k</strong><small>22M</small></span>
+                  </button>
+                </li>
+              </ul>
+              <div class="queue-detail" id="queueDetail" aria-live="polite">
+                <span class="detail-id" id="queueDetailId">EXC-2048 · SELECTED</span
+                ><strong id="queueDetailTitle">18 priority orders on constrained capacity</strong
+                ><small id="queueDetailMeta">Decision ready · 3 plans scored</small
+                ><button id="openRecord">Open record →</button>
+              </div>
+            </section>
+          </div>
+
+          <section class="lower-strip" aria-label="Facility operations and events">
+            <div class="facility-section">
+              <div class="section-title">
+                <div>
+                  <p class="eyebrow">FACILITY CAPACITY</p>
+                  <h2>Pressure points</h2>
+                </div>
+                <a href="#" id="facilitiesLink">All facilities →</a>
+              </div>
+              <div class="facility-grid">
+                <article class="facility critical">
+                  <div class="facility-top"><strong>RTM Gateway</strong><span>96%</span></div>
+                  <div class="bar"><i style="width: 96%"></i></div>
+                  <small><b>Critical</b> · 22 pallets over plan</small>
+                </article>
+                <article class="facility watch">
+                  <div class="facility-top"><strong>WAW Fulfilment</strong><span>88%</span></div>
+                  <div class="bar"><i style="width: 88%"></i></div>
+                  <small><b>Watch</b> · picking constraint</small>
+                </article>
+                <article class="facility watch">
+                  <div class="facility-top"><strong>IST Bonded</strong><span>91%</span></div>
+                  <div class="bar"><i style="width: 91%"></i></div>
+                  <small><b>Watch</b> · customs dwell +7h</small>
+                </article>
+                <article class="facility">
+                  <div class="facility-top"><strong>DXB South</strong><span>68%</span></div>
+                  <div class="bar"><i style="width: 68%"></i></div>
+                  <small><b>Healthy</b> · 312 slots available</small>
+                </article>
+              </div>
             </div>
-            <ul class="exception-list" id="exceptionList">
-              <li class="exception-row critical" data-severity="critical" data-id="EXC-2051"><button class="exception-main"><span class="severity-icon"><svg class="icon"><use href="#i-alert"/></svg></span><span class="exception-copy"><span class="severity-label">Critical · Customs</span><strong>Customs hold in Istanbul</strong><small>6 orders · IST bonded zone · +19h</small></span><span class="exception-impact"><strong>€82.4k</strong><small>+19H</small></span></button></li>
-              <li class="exception-row critical selected" data-severity="critical" data-id="EXC-2048"><button class="exception-main"><span class="severity-icon"><svg class="icon"><use href="#i-truck"/></svg></span><span class="exception-copy"><span class="severity-label">Critical · Capacity</span><strong>Rotterdam → Istanbul shortfall</strong><small>18 priority orders · Argo Freight · +31h</small></span><span class="exception-impact"><strong>€46.8k</strong><small>+31H</small></span></button><button class="review-link" id="reviewDecision">Review decision →</button></li>
-              <li class="exception-row watch" data-severity="watch" data-id="EXC-2046"><button class="exception-main"><span class="severity-icon"><svg class="icon"><use href="#i-temp"/></svg></span><span class="exception-copy"><span class="severity-label">Watch · Cold chain</span><strong>Temperature drift in Milan</strong><small>2 loads · MXP reefer hub · +4h</small></span><span class="exception-impact"><strong>€21.6k</strong><small>+4H</small></span></button></li>
-              <li class="exception-row watch" data-severity="watch" data-id="EXC-2042"><button class="exception-main"><span class="severity-icon"><svg class="icon"><use href="#i-clock"/></svg></span><span class="exception-copy"><span class="severity-label">Watch · Fulfilment</span><strong>Warsaw pick delay</strong><small>9 orders · WAW-02 · +3h 20m</small></span><span class="exception-impact"><strong>€14.9k</strong><small>+3H</small></span></button></li>
-              <li class="exception-row watch" data-severity="watch" data-id="EXC-2039"><button class="exception-main"><span class="severity-icon"><svg class="icon"><use href="#i-box"/></svg></span><span class="exception-copy"><span class="severity-label">Watch · Last mile</span><strong>Failed delivery cluster in Hamburg</strong><small>11 drops · postcode 20457 · +1 day</small></span><span class="exception-impact"><strong>€10.7k</strong><small>+1D</small></span></button></li>
-              <li class="exception-row watch" data-severity="watch" data-id="EXC-2036"><button class="exception-main"><span class="severity-icon"><svg class="icon"><use href="#i-wifi"/></svg></span><span class="exception-copy"><span class="severity-label">Watch · Integration</span><strong>Carrier API lag</strong><small>Orbit Line · 143 stale milestones · 22m</small></span><span class="exception-impact"><strong>€7.8k</strong><small>22M</small></span></button></li>
-            </ul>
-            <div class="queue-detail" id="queueDetail" aria-live="polite"><span class="detail-id" id="queueDetailId">EXC-2048 · SELECTED</span><strong id="queueDetailTitle">18 priority orders on constrained capacity</strong><small id="queueDetailMeta">Decision ready · 3 plans scored</small><button id="openRecord">Open record →</button></div>
+            <div class="timeline-section">
+              <div class="section-title">
+                <div>
+                  <p class="eyebrow">NEXT 8 HOURS</p>
+                  <h2>Network events</h2>
+                </div>
+              </div>
+              <ol class="timeline">
+                <li>
+                  <time>10:15</time><i></i
+                  ><span
+                    ><strong>Helix carrier pickup</strong
+                    ><small>RTM rail apron · 18 orders</small></span
+                  >
+                </li>
+                <li class="warn">
+                  <time>12:30</time><i></i
+                  ><span
+                    ><strong>Istanbul customs cutoff</strong
+                    ><small>6 held orders require release</small></span
+                  >
+                </li>
+                <li>
+                  <time>15:40</time><i></i
+                  ><span
+                    ><strong>Warsaw capacity release</strong
+                    ><small>42 pallet positions expected</small></span
+                  >
+                </li>
+              </ol>
+            </div>
           </section>
         </div>
+      </main>
+    </div>
 
-        <section class="lower-strip" aria-label="Facility operations and events">
-          <div class="facility-section">
-            <div class="section-title"><div><p class="eyebrow">FACILITY CAPACITY</p><h2>Pressure points</h2></div><a href="#" id="facilitiesLink">All facilities →</a></div>
-            <div class="facility-grid">
-              <article class="facility critical"><div class="facility-top"><strong>RTM Gateway</strong><span>96%</span></div><div class="bar"><i style="width:96%"></i></div><small><b>Critical</b> · 22 pallets over plan</small></article>
-              <article class="facility watch"><div class="facility-top"><strong>WAW Fulfilment</strong><span>88%</span></div><div class="bar"><i style="width:88%"></i></div><small><b>Watch</b> · picking constraint</small></article>
-              <article class="facility watch"><div class="facility-top"><strong>IST Bonded</strong><span>91%</span></div><div class="bar"><i style="width:91%"></i></div><small><b>Watch</b> · customs dwell +7h</small></article>
-              <article class="facility"><div class="facility-top"><strong>DXB South</strong><span>68%</span></div><div class="bar"><i style="width:68%"></i></div><small><b>Healthy</b> · 312 slots available</small></article>
+    <div class="drawer-backdrop" id="drawerBackdrop"></div>
+    <aside
+      class="decision-drawer"
+      id="decisionDrawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="drawerTitle"
+      aria-hidden="true"
+      inert
+    >
+      <div class="drawer-header">
+        <div>
+          <p class="eyebrow">EXC-2048 · CAPACITY</p>
+          <h2 id="drawerTitle">Reroute 18 priority orders?</h2>
+        </div>
+        <button class="icon-btn" id="closeDrawer" aria-label="Close decision panel">
+          <svg class="icon"><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <div class="drawer-body">
+        <div class="decision-lead">
+          <svg class="icon"><use href="#i-alert" /></svg
+          ><span
+            >Argo Freight has withdrawn 40% of booked capacity on the Rotterdam → Istanbul lane. A
+            network-safe alternative is ready.</span
+          >
+        </div>
+        <div class="plan-compare">
+          <article class="plan">
+            <span class="plan-badge">CURRENT PLAN</span>
+            <h3>Direct road</h3>
+            <p>Argo Freight · Rotterdam → Istanbul</p>
+            <div class="plan-datum">
+              <span>ETA</span><strong>24 Jul<br />18:00</strong>
             </div>
+            <div class="plan-datum"><span>On-time confidence</span><strong>71%</strong></div>
+            <div class="plan-datum"><span>Total cost</span><strong>€12.4k</strong></div>
+          </article>
+          <article class="plan recommended">
+            <span class="plan-badge">RECOMMENDED · SCORE 92</span>
+            <h3>Rail + road</h3>
+            <p>Helix / Orbit · Rotterdam → Vienna → Istanbul</p>
+            <div class="plan-datum">
+              <span>ETA</span><strong>23 Jul<br />11:30</strong>
+            </div>
+            <div class="plan-datum">
+              <span>On-time confidence</span><strong class="confidence">93%</strong>
+            </div>
+            <div class="plan-datum"><span>Total cost</span><strong>€15.1k</strong></div>
+          </article>
+        </div>
+        <p class="tradeoff">
+          Arrives <strong>30h 30m earlier</strong> · costs <strong>€2.7k more</strong> · saves
+          <strong>€38.2k at-risk margin</strong> · <strong>14% lower CO₂e</strong>.
+        </p>
+        <section class="rationale">
+          <h3>Why this plan ranks first</h3>
+          <div class="score-grid">
+            <div class="score"><span>Promise</span><strong>+22</strong></div>
+            <div class="score"><span>Capacity</span><strong>+18</strong></div>
+            <div class="score"><span>Risk</span><strong>+11</strong></div>
+            <div class="score negative"><span>Cost</span><strong>−7</strong></div>
+            <div class="score"><span>Carbon</span><strong>+4</strong></div>
           </div>
-          <div class="timeline-section">
-            <div class="section-title"><div><p class="eyebrow">NEXT 8 HOURS</p><h2>Network events</h2></div></div>
-            <ol class="timeline">
-              <li><time>10:15</time><i></i><span><strong>Helix carrier pickup</strong><small>RTM rail apron · 18 orders</small></span></li>
-              <li class="warn"><time>12:30</time><i></i><span><strong>Istanbul customs cutoff</strong><small>6 held orders require release</small></span></li>
-              <li><time>15:40</time><i></i><span><strong>Warsaw capacity release</strong><small>42 pallet positions expected</small></span></li>
-            </ol>
+        </section>
+        <section class="alternates">
+          <h3>Alternate plans</h3>
+          <div class="alternate">
+            <strong>Road via Prague · Nova / Argo</strong><span class="alt-score">84</span
+            ><small>ETA 23 Jul 19:20 · €14.3k · 86% confidence</small>
+          </div>
+          <div class="alternate">
+            <strong>Air bridge via Frankfurt · AeroLink</strong><span class="alt-score">76</span
+            ><small>ETA 22 Jul 16:45 · €28.7k · 97% confidence</small>
+          </div>
+        </section>
+        <section class="audit">
+          <svg class="icon"><use href="#i-shield" /></svg>
+          <div>
+            <h3>Decision receipt enabled</h3>
+            <p>
+              Inputs, policy rules, weighted scores, selected plan, alternatives and any operator
+              override are recorded with timestamp and identity.
+            </p>
           </div>
         </section>
       </div>
-    </main>
-  </div>
-
-  <div class="drawer-backdrop" id="drawerBackdrop"></div>
-  <aside class="decision-drawer" id="decisionDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true" inert>
-    <div class="drawer-header"><div><p class="eyebrow">EXC-2048 · CAPACITY</p><h2 id="drawerTitle">Reroute 18 priority orders?</h2></div><button class="icon-btn" id="closeDrawer" aria-label="Close decision panel"><svg class="icon"><use href="#i-close"/></svg></button></div>
-    <div class="drawer-body">
-      <div class="decision-lead"><svg class="icon"><use href="#i-alert"/></svg><span>Argo Freight has withdrawn 40% of booked capacity on the Rotterdam → Istanbul lane. A network-safe alternative is ready.</span></div>
-      <div class="plan-compare">
-        <article class="plan"><span class="plan-badge">CURRENT PLAN</span><h3>Direct road</h3><p>Argo Freight · Rotterdam → Istanbul</p><div class="plan-datum"><span>ETA</span><strong>24 Jul<br>18:00</strong></div><div class="plan-datum"><span>On-time confidence</span><strong>71%</strong></div><div class="plan-datum"><span>Total cost</span><strong>€12.4k</strong></div></article>
-        <article class="plan recommended"><span class="plan-badge">RECOMMENDED · SCORE 92</span><h3>Rail + road</h3><p>Helix / Orbit · Rotterdam → Vienna → Istanbul</p><div class="plan-datum"><span>ETA</span><strong>23 Jul<br>11:30</strong></div><div class="plan-datum"><span>On-time confidence</span><strong class="confidence">93%</strong></div><div class="plan-datum"><span>Total cost</span><strong>€15.1k</strong></div></article>
+      <div class="drawer-actions">
+        <button class="btn secondary" id="keepPlan">Keep current plan</button
+        ><button class="btn primary" id="approveReroute">
+          <svg class="icon"><use href="#i-check" /></svg>Approve reroute
+        </button>
       </div>
-      <p class="tradeoff">Arrives <strong>30h 30m earlier</strong> · costs <strong>€2.7k more</strong> · saves <strong>€38.2k at-risk margin</strong> · <strong>14% lower CO₂e</strong>.</p>
-      <section class="rationale"><h3>Why this plan ranks first</h3><div class="score-grid"><div class="score"><span>Promise</span><strong>+22</strong></div><div class="score"><span>Capacity</span><strong>+18</strong></div><div class="score"><span>Risk</span><strong>+11</strong></div><div class="score negative"><span>Cost</span><strong>−7</strong></div><div class="score"><span>Carbon</span><strong>+4</strong></div></div></section>
-      <section class="alternates"><h3>Alternate plans</h3><div class="alternate"><strong>Road via Prague · Nova / Argo</strong><span class="alt-score">84</span><small>ETA 23 Jul 19:20 · €14.3k · 86% confidence</small></div><div class="alternate"><strong>Air bridge via Frankfurt · AeroLink</strong><span class="alt-score">76</span><small>ETA 22 Jul 16:45 · €28.7k · 97% confidence</small></div></section>
-      <section class="audit"><svg class="icon"><use href="#i-shield"/></svg><div><h3>Decision receipt enabled</h3><p>Inputs, policy rules, weighted scores, selected plan, alternatives and any operator override are recorded with timestamp and identity.</p></div></section>
+    </aside>
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <svg class="icon"><use href="#i-check" /></svg><span id="toastText">Reroute approved</span>
     </div>
-    <div class="drawer-actions"><button class="btn secondary" id="keepPlan">Keep current plan</button><button class="btn primary" id="approveReroute"><svg class="icon"><use href="#i-check"/></svg>Approve reroute</button></div>
-  </aside>
-  <div class="toast" id="toast" role="status" aria-live="polite"><svg class="icon"><use href="#i-check"/></svg><span id="toastText">Reroute approved</span></div>
 
-  <script>
-    (() => {
-      const body = document.body;
-      const toast = document.getElementById('toast');
-      const toastText = document.getElementById('toastText');
-      const drawer = document.getElementById('decisionDrawer');
-      const backdrop = document.getElementById('drawerBackdrop');
-      const openButton = document.getElementById('reviewDecision');
-      const closeButton = document.getElementById('closeDrawer');
-      let lastFocused = null;
-      let toastTimer;
+    <script>
+      (() => {
+        const body = document.body;
+        const toast = document.getElementById('toast');
+        const toastText = document.getElementById('toastText');
+        const drawer = document.getElementById('decisionDrawer');
+        const backdrop = document.getElementById('drawerBackdrop');
+        const openButton = document.getElementById('reviewDecision');
+        const closeButton = document.getElementById('closeDrawer');
+        let lastFocused = null;
+        let toastTimer;
 
-      function showToast(message) {
-        toastText.textContent = message;
-        toast.classList.add('show');
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
-      }
-
-      function openDrawer() {
-        lastFocused = document.activeElement;
-        body.classList.add('drawer-open');
-        drawer.removeAttribute('inert');
-        drawer.setAttribute('aria-hidden', 'false');
-        requestAnimationFrame(() => closeButton.focus());
-      }
-
-      function closeDrawer() {
-        body.classList.remove('drawer-open');
-        drawer.setAttribute('inert', '');
-        drawer.setAttribute('aria-hidden', 'true');
-        if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
-      }
-
-      openButton.addEventListener('click', openDrawer);
-      closeButton.addEventListener('click', closeDrawer);
-      backdrop.addEventListener('click', closeDrawer);
-      document.getElementById('keepPlan').addEventListener('click', () => { closeDrawer(); showToast('Current plan kept — no network changes made'); });
-
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && body.classList.contains('drawer-open')) closeDrawer();
-        if (event.key === 'Tab' && body.classList.contains('drawer-open')) {
-          const focusable = [...drawer.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])')].filter(el => !el.disabled);
-          if (!focusable.length) return;
-          const first = focusable[0], last = focusable[focusable.length - 1];
-          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        function showToast(message) {
+          toastText.textContent = message;
+          toast.classList.add('show');
+          clearTimeout(toastTimer);
+          toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
         }
-      });
 
-      document.getElementById('approveReroute').addEventListener('click', () => {
-        const row = document.querySelector('[data-id="EXC-2048"]');
-        if (!row.classList.contains('approved-row')) {
-          row.classList.add('approved-row');
-          row.dataset.resolved = 'true';
-          openButton.remove();
-          updateCounts();
-          document.getElementById('decisionText').textContent = 'Five exceptions need a decision. One reroute is in motion.';
-          document.getElementById('queueDetailId').textContent = 'EXC-2048 · APPROVED';
-          document.getElementById('queueDetailTitle').textContent = 'Rail + road reroute dispatched';
-          document.getElementById('queueDetailMeta').textContent = 'Decision receipt NS-DR-7791 recorded';
+        function openDrawer() {
+          lastFocused = document.activeElement;
+          body.classList.add('drawer-open');
+          drawer.removeAttribute('inert');
+          drawer.setAttribute('aria-hidden', 'false');
+          requestAnimationFrame(() => closeButton.focus());
         }
-        closeDrawer();
-        showToast('Reroute approved · Decision receipt NS-DR-7791 recorded');
-      });
 
-      const filterButtons = [...document.querySelectorAll('.filter-btn')];
-      function updateCounts() {
-        const openRows = [...document.querySelectorAll('.exception-row:not([data-resolved="true"])')];
-        const critical = openRows.filter(row => row.dataset.severity === 'critical').length;
-        const watch = openRows.filter(row => row.dataset.severity === 'watch').length;
-        document.getElementById('queueCount').textContent = openRows.length;
-        document.getElementById('queueCount').setAttribute('aria-label', `${openRows.length} open exceptions`);
-        filterButtons[0].querySelector('.filter-count').textContent = openRows.length;
-        filterButtons[1].querySelector('.filter-count').textContent = critical;
-        filterButtons[2].querySelector('.filter-count').textContent = watch;
-        applyFilter(document.querySelector('.filter-btn.active').dataset.filter);
-      }
-      function applyFilter(filter) {
-        document.querySelectorAll('.exception-row').forEach(row => {
-          const matches = !row.dataset.resolved && (filter === 'all' || row.dataset.severity === filter);
-          row.hidden = !matches;
+        function closeDrawer() {
+          body.classList.remove('drawer-open');
+          drawer.setAttribute('inert', '');
+          drawer.setAttribute('aria-hidden', 'true');
+          if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
+        }
+
+        openButton.addEventListener('click', openDrawer);
+        closeButton.addEventListener('click', closeDrawer);
+        backdrop.addEventListener('click', closeDrawer);
+        document.getElementById('keepPlan').addEventListener('click', () => {
+          closeDrawer();
+          showToast('Current plan kept — no network changes made');
         });
-      }
-      filterButtons.forEach(button => button.addEventListener('click', () => {
-        filterButtons.forEach(btn => btn.classList.remove('active'));
-        button.classList.add('active');
-        applyFilter(button.dataset.filter);
-      }));
 
-      document.querySelectorAll('.exception-main').forEach(button => button.addEventListener('click', () => {
-        document.querySelectorAll('.exception-row').forEach(row => row.classList.remove('selected'));
-        const row = button.closest('.exception-row');
-        row.classList.add('selected');
-        document.getElementById('queueDetailId').textContent = `${row.dataset.id} · SELECTED`;
-        document.getElementById('queueDetailTitle').textContent = row.querySelector('.exception-copy strong').textContent;
-        document.getElementById('queueDetailMeta').textContent = `${row.querySelector('.exception-copy small').textContent} · ${row.querySelector('.exception-impact strong').textContent} exposure`;
-        showToast(`${row.dataset.id} selected for review`);
-      }));
-      document.getElementById('openRecord').addEventListener('click', () => {
-        const selected = document.querySelector('.exception-row.selected');
-        if (selected && selected.dataset.id === 'EXC-2048' && !selected.dataset.resolved) openDrawer();
-        else showToast(`${document.getElementById('queueDetailId').textContent.split(' · ')[0]} record opened in context panel`);
-      });
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && body.classList.contains('drawer-open')) closeDrawer();
+          if (event.key === 'Tab' && body.classList.contains('drawer-open')) {
+            const focusable = [
+              ...drawer.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])'),
+            ].filter((el) => !el.disabled);
+            if (!focusable.length) return;
+            const first = focusable[0],
+              last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        });
 
-      const nodeData = {
-        Rotterdam: ['NLRTM · 51.92°N', '3,140', '96%', '2 critical', 'var(--red)'],
-        Hamburg: ['DEHAM · 53.55°N', '2,220', '82%', '1 watch', 'var(--orange)'],
-        Warsaw: ['PLWAW · 52.23°N', '1,846', '88%', '1 watch', 'var(--orange)'],
-        Milan: ['ITMIL · 45.46°N', '1,672', '74%', '1 watch', 'var(--orange)'],
-        Istanbul: ['TRIST · 41.01°N', '2,518', '91%', '1 critical', 'var(--red)'],
-        Dubai: ['AEDXB · 25.20°N', '1,444', '68%', 'healthy', 'var(--teal)']
-      };
-      function selectNode(node) {
-        document.querySelectorAll('.node').forEach(item => item.classList.remove('selected'));
-        node.classList.add('selected');
-        const data = nodeData[node.dataset.node];
-        document.getElementById('nodeName').textContent = node.dataset.node;
-        document.getElementById('nodeCode').textContent = data[0];
-        document.getElementById('nodeFlow').textContent = data[1];
-        document.getElementById('nodeUtil').textContent = data[2];
-        document.getElementById('nodeIssue').textContent = data[3];
-        document.getElementById('nodeIssue').style.color = data[4];
-      }
-      document.querySelectorAll('.node').forEach(node => {
-        node.addEventListener('click', () => selectNode(node));
-        node.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectNode(node); } });
-      });
+        document.getElementById('approveReroute').addEventListener('click', () => {
+          const row = document.querySelector('[data-id="EXC-2048"]');
+          if (!row.classList.contains('approved-row')) {
+            row.classList.add('approved-row');
+            row.dataset.resolved = 'true';
+            openButton.remove();
+            updateCounts();
+            document.getElementById('decisionText').textContent =
+              'Five exceptions need a decision. One reroute is in motion.';
+            document.getElementById('queueDetailId').textContent = 'EXC-2048 · APPROVED';
+            document.getElementById('queueDetailTitle').textContent =
+              'Rail + road reroute dispatched';
+            document.getElementById('queueDetailMeta').textContent =
+              'Decision receipt NS-DR-7791 recorded';
+          }
+          closeDrawer();
+          showToast('Reroute approved · Decision receipt NS-DR-7791 recorded');
+        });
 
-      const mapTabs = [...document.querySelectorAll('[data-view]')];
-      const map = document.getElementById('networkMap');
-      mapTabs.forEach(tab => tab.addEventListener('click', () => {
-        mapTabs.forEach(item => { item.classList.remove('active'); item.setAttribute('aria-selected', 'false'); });
-        tab.classList.add('active'); tab.setAttribute('aria-selected', 'true');
-        map.classList.toggle('weather-on', tab.dataset.view === 'weather');
-        map.classList.toggle('shipments-on', tab.dataset.view === 'shipments');
-        showToast(`${tab.textContent} layer active`);
-      }));
+        const filterButtons = [...document.querySelectorAll('.filter-btn')];
+        function updateCounts() {
+          const openRows = [
+            ...document.querySelectorAll('.exception-row:not([data-resolved="true"])'),
+          ];
+          const critical = openRows.filter((row) => row.dataset.severity === 'critical').length;
+          const watch = openRows.filter((row) => row.dataset.severity === 'watch').length;
+          document.getElementById('queueCount').textContent = openRows.length;
+          document
+            .getElementById('queueCount')
+            .setAttribute('aria-label', `${openRows.length} open exceptions`);
+          filterButtons[0].querySelector('.filter-count').textContent = openRows.length;
+          filterButtons[1].querySelector('.filter-count').textContent = critical;
+          filterButtons[2].querySelector('.filter-count').textContent = watch;
+          applyFilter(document.querySelector('.filter-btn.active').dataset.filter);
+        }
+        function applyFilter(filter) {
+          document.querySelectorAll('.exception-row').forEach((row) => {
+            const matches =
+              !row.dataset.resolved && (filter === 'all' || row.dataset.severity === filter);
+            row.hidden = !matches;
+          });
+        }
+        filterButtons.forEach((button) =>
+          button.addEventListener('click', () => {
+            filterButtons.forEach((btn) => btn.classList.remove('active'));
+            button.classList.add('active');
+            applyFilter(button.dataset.filter);
+          }),
+        );
 
-      document.getElementById('refreshBtn').addEventListener('click', event => {
-        const button = event.currentTarget;
-        if (button.classList.contains('spinning')) return;
-        button.classList.add('spinning'); button.disabled = true;
-        document.getElementById('syncState').textContent = 'Synchronizing 14 data sources…';
-        setTimeout(() => {
-          button.classList.remove('spinning'); button.disabled = false;
-          document.getElementById('timestamp').textContent = 'TUE, 21 JUL · 09:43 TRT';
-          document.getElementById('syncState').textContent = 'Network state synchronized just now';
-          showToast('Network state refreshed');
-        }, 1100);
-      });
+        document.querySelectorAll('.exception-main').forEach((button) =>
+          button.addEventListener('click', () => {
+            document
+              .querySelectorAll('.exception-row')
+              .forEach((row) => row.classList.remove('selected'));
+            const row = button.closest('.exception-row');
+            row.classList.add('selected');
+            document.getElementById('queueDetailId').textContent = `${row.dataset.id} · SELECTED`;
+            document.getElementById('queueDetailTitle').textContent =
+              row.querySelector('.exception-copy strong').textContent;
+            document.getElementById('queueDetailMeta').textContent =
+              `${row.querySelector('.exception-copy small').textContent} · ${row.querySelector('.exception-impact strong').textContent} exposure`;
+            showToast(`${row.dataset.id} selected for review`);
+          }),
+        );
+        document.getElementById('openRecord').addEventListener('click', () => {
+          const selected = document.querySelector('.exception-row.selected');
+          if (selected && selected.dataset.id === 'EXC-2048' && !selected.dataset.resolved)
+            openDrawer();
+          else
+            showToast(
+              `${document.getElementById('queueDetailId').textContent.split(' · ')[0]} record opened in context panel`,
+            );
+        });
 
-      document.querySelectorAll('[data-nav]').forEach(button => button.addEventListener('click', () => {
-        document.querySelectorAll('[data-nav]').forEach(item => { item.classList.remove('active'); item.removeAttribute('aria-current'); });
-        button.classList.add('active'); button.setAttribute('aria-current', 'page');
-        showToast(`${button.dataset.nav} selected · Control Tower demo remains on overview`);
-      }));
-      document.getElementById('facilitiesLink').addEventListener('click', event => { event.preventDefault(); showToast('Facilities view selected · 14 sites in EMEA network'); });
-      document.getElementById('commandBtn').addEventListener('click', () => showToast('Command menu ready · Try “find shipment” or “open scenario”'));
-      document.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); showToast('Command menu ready · Try “find shipment” or “open scenario”'); } });
-    })();
-  </script>
-</body>
+        const nodeData = {
+          Rotterdam: ['NLRTM · 51.92°N', '3,140', '96%', '2 critical', 'var(--red)'],
+          Hamburg: ['DEHAM · 53.55°N', '2,220', '82%', '1 watch', 'var(--orange)'],
+          Warsaw: ['PLWAW · 52.23°N', '1,846', '88%', '1 watch', 'var(--orange)'],
+          Milan: ['ITMIL · 45.46°N', '1,672', '74%', '1 watch', 'var(--orange)'],
+          Istanbul: ['TRIST · 41.01°N', '2,518', '91%', '1 critical', 'var(--red)'],
+          Dubai: ['AEDXB · 25.20°N', '1,444', '68%', 'healthy', 'var(--teal)'],
+        };
+        function selectNode(node) {
+          document.querySelectorAll('.node').forEach((item) => item.classList.remove('selected'));
+          node.classList.add('selected');
+          const data = nodeData[node.dataset.node];
+          document.getElementById('nodeName').textContent = node.dataset.node;
+          document.getElementById('nodeCode').textContent = data[0];
+          document.getElementById('nodeFlow').textContent = data[1];
+          document.getElementById('nodeUtil').textContent = data[2];
+          document.getElementById('nodeIssue').textContent = data[3];
+          document.getElementById('nodeIssue').style.color = data[4];
+        }
+        document.querySelectorAll('.node').forEach((node) => {
+          node.addEventListener('click', () => selectNode(node));
+          node.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              selectNode(node);
+            }
+          });
+        });
+
+        const mapTabs = [...document.querySelectorAll('[data-view]')];
+        const map = document.getElementById('networkMap');
+        mapTabs.forEach((tab) =>
+          tab.addEventListener('click', () => {
+            mapTabs.forEach((item) => {
+              item.classList.remove('active');
+              item.setAttribute('aria-selected', 'false');
+            });
+            tab.classList.add('active');
+            tab.setAttribute('aria-selected', 'true');
+            map.classList.toggle('weather-on', tab.dataset.view === 'weather');
+            map.classList.toggle('shipments-on', tab.dataset.view === 'shipments');
+            showToast(`${tab.textContent} layer active`);
+          }),
+        );
+
+        document.getElementById('refreshBtn').addEventListener('click', (event) => {
+          const button = event.currentTarget;
+          if (button.classList.contains('spinning')) return;
+          button.classList.add('spinning');
+          button.disabled = true;
+          document.getElementById('syncState').textContent = 'Synchronizing 14 data sources…';
+          setTimeout(() => {
+            button.classList.remove('spinning');
+            button.disabled = false;
+            document.getElementById('timestamp').textContent = 'TUE, 21 JUL · 09:43 TRT';
+            document.getElementById('syncState').textContent =
+              'Network state synchronized just now';
+            showToast('Network state refreshed');
+          }, 1100);
+        });
+
+        document.querySelectorAll('[data-nav]').forEach((button) =>
+          button.addEventListener('click', () => {
+            document.querySelectorAll('[data-nav]').forEach((item) => {
+              item.classList.remove('active');
+              item.removeAttribute('aria-current');
+            });
+            button.classList.add('active');
+            button.setAttribute('aria-current', 'page');
+            showToast(`${button.dataset.nav} selected · Control Tower demo remains on overview`);
+          }),
+        );
+        document.getElementById('facilitiesLink').addEventListener('click', (event) => {
+          event.preventDefault();
+          showToast('Facilities view selected · 14 sites in EMEA network');
+        });
+        document
+          .getElementById('commandBtn')
+          .addEventListener('click', () =>
+            showToast('Command menu ready · Try “find shipment” or “open scenario”'),
+          );
+        document.addEventListener('keydown', (event) => {
+          if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+            showToast('Command menu ready · Try “find shipment” or “open scenario”');
+          }
+        });
+      })();
+    </script>
+  </body>
 </html>

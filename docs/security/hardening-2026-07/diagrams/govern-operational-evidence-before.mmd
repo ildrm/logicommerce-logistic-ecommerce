@@ -1,0 +1,5 @@
+flowchart LR
+  O[Operator] --> R[Runbook]
+  O --> D[Domain APIs]
+  D --> A[(Audit and ledgers)]
+  R -. external evidence .-> X[Mutable artifacts]

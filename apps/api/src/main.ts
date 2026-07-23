@@ -9,16 +9,39 @@ import helmet from '@fastify/helmet';
 import { parseEnvironment } from '@logicommerce/config';
 import { createLogger } from '@logicommerce/observability';
 import { AppModule } from './app.module.js';
+import { JsonSafeInterceptor } from './platform/json-safe.interceptor.js';
 import { ProblemDetailsFilter } from './platform/problem-details.filter.js';
 
 async function bootstrap() {
   const environment = parseEnvironment(process.env);
   const logger = createLogger('api');
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
-    bufferLogs: true,
-  });
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter({
+      bodyLimit: 1_048_576,
+      requestTimeout: 30_000,
+      connectionTimeout: 10_000,
+      keepAliveTimeout: 72_000,
+    }),
+    { bufferLogs: true },
+  );
 
-  await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:'],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    strictTransportSecurity:
+      process.env.NODE_ENV === 'production'
+        ? { maxAge: 31_536_000, includeSubDomains: true, preload: true }
+        : false,
+  });
   await app.register(cors, {
     origin: environment.CORS_ORIGINS.split(',').map((origin) => origin.trim()),
     credentials: true,
@@ -40,12 +63,14 @@ async function bootstrap() {
     new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
   );
   app.useGlobalFilters(new ProblemDetailsFilter(logger));
+  app.useGlobalInterceptors(new JsonSafeInterceptor());
 
   const openApi = new DocumentBuilder()
     .setTitle('LogiCommerce API')
     .setDescription('Tenant-scoped commerce and logistics API')
     .setVersion('0.1.0')
     .addBearerAuth()
+    .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'machineCredential')
     .addApiKey({ type: 'apiKey', name: 'Idempotency-Key', in: 'header' }, 'idempotency')
     .build();
   SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, openApi));

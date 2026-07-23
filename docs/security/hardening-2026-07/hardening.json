@@ -1,0 +1,232 @@
+{
+  "documentType": "codex-security.hardening-analysis",
+  "schemaVersion": "1.0",
+  "analysisId": "hardening_20260723_logicommerce",
+  "sourceEvidence": {
+    "kind": "document_collection",
+    "label": "LogiCommerce threat model and production-readiness requirements",
+    "collectionSha256": "5c391cc8de31498933b98884d4b7e43c78223857933461cd549972e68a90c723",
+    "artifactCount": 1,
+    "sourceDrift": "present"
+  },
+  "assessment": {
+    "outcome": "opportunities_identified",
+    "summary": "Source evidence supports a central, tenant-scoped operational evidence boundary."
+  },
+  "constraints": {
+    "profile": "balanced",
+    "changeHorizons": ["incremental", "medium_term"],
+    "nonNegotiables": [
+      "Tenant isolation",
+      "Append-only financial and stock evidence",
+      "Human approval"
+    ],
+    "assumptions": ["No production load, penetration, or restore measurement was supplied."]
+  },
+  "opportunities": [
+    {
+      "opportunityId": "govern-operational-evidence",
+      "title": "Govern high-impact transitions and operational evidence",
+      "summary": "Centralize permissioned operational evidence without merging domain ownership.",
+      "diagnosis": "The threat model requires immutable audits and dual approval while readiness evidence previously existed only as planned documentation.",
+      "evidence": [
+        {
+          "claimType": "observed",
+          "sourceKind": "threat_model",
+          "evidenceId": "E001",
+          "path": "docs/security/threat-model.md",
+          "claim": "Cross-tenant access, refund and payout abuse, secret leakage, and privileged insider actions are named high-risk threats."
+        },
+        {
+          "claimType": "inferred",
+          "sourceKind": "source",
+          "path": "apps/api/src",
+          "claim": "High-impact workflows benefit from shared evidence semantics while retaining domain-owned state transitions."
+        }
+      ],
+      "desiredInvariants": [
+        "Every high-impact action is tenant-scoped, permissioned, attributable, and state constrained.",
+        "Posted ledgers and decision history are compensated rather than overwritten.",
+        "Operational claims have recorded observations or exercises."
+      ],
+      "proposalPath": "proposals/govern-operational-evidence.md",
+      "options": [
+        {
+          "optionId": "local-runbooks",
+          "title": "Keep local runbooks and focused guards",
+          "kind": "baseline",
+          "summary": "Document controls and keep evidence outside the application.",
+          "diagramPaths": {
+            "before": "diagrams/govern-operational-evidence-before.mmd",
+            "after": "diagrams/govern-operational-evidence-local-runbooks-after.mmd"
+          },
+          "evidenceCoverage": [
+            {
+              "evidenceId": "E001",
+              "effect": "mitigates",
+              "tacticalFixRequired": true,
+              "rationale": "Runbooks guide response but cannot enforce attribution or tenant isolation."
+            }
+          ],
+          "tradeoffs": [
+            {
+              "dimension": "security",
+              "direction": "improves",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "Focused ingress guards narrow common abuse but evidence can drift.",
+              "validationPlan": "Review incident and restore artifacts quarterly."
+            },
+            {
+              "dimension": "performance",
+              "direction": "neutral",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "No application write path is added.",
+              "validationPlan": "Compare request latency before and after ingress limits."
+            },
+            {
+              "dimension": "memory",
+              "direction": "neutral",
+              "confidence": "high",
+              "basis": "source-derived",
+              "assessment": "No new runtime store is introduced.",
+              "validationPlan": "Observe process RSS under load."
+            },
+            {
+              "dimension": "reliability",
+              "direction": "improves",
+              "confidence": "low",
+              "basis": "hypothetical",
+              "assessment": "Runbooks improve consistency only when followed.",
+              "validationPlan": "Score incident exercises."
+            },
+            {
+              "dimension": "operability",
+              "direction": "improves",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "Procedures become discoverable but evidence remains fragmented.",
+              "validationPlan": "Audit evidence retrieval time."
+            },
+            {
+              "dimension": "migration",
+              "direction": "neutral",
+              "confidence": "high",
+              "basis": "source-derived",
+              "assessment": "Documentation is additive.",
+              "validationPlan": "Review links in release checklist."
+            }
+          ],
+          "residualRisks": [
+            "Evidence may be mutable, incomplete, or assigned to the wrong tenant."
+          ],
+          "implementationReadiness": {
+            "affectedComponents": ["docs/operations"],
+            "workPackages": ["Publish runbooks."],
+            "acceptanceCriteria": ["Operators can execute a tabletop exercise."],
+            "migrationNotes": [],
+            "rollback": "Revert documentation changes."
+          }
+        },
+        {
+          "optionId": "central-evidence-boundary",
+          "title": "Add a central tenant-scoped evidence boundary",
+          "kind": "structural",
+          "summary": "Record SLO, recovery, retention, privacy, approval, and rollback evidence through guarded APIs.",
+          "diagramPaths": {
+            "before": "diagrams/govern-operational-evidence-before.mmd",
+            "after": "diagrams/govern-operational-evidence-central-evidence-boundary-after.mmd"
+          },
+          "evidenceCoverage": [
+            {
+              "evidenceId": "E001",
+              "effect": "mitigates",
+              "tacticalFixRequired": true,
+              "rationale": "Central evidence complements, but does not replace, ingress limits and domain-specific validation."
+            }
+          ],
+          "tradeoffs": [
+            {
+              "dimension": "security",
+              "direction": "improves",
+              "confidence": "high",
+              "basis": "source-derived",
+              "assessment": "Permission, tenant, approval, and immutable-history controls become enforceable.",
+              "validationPlan": "Run cross-tenant and unauthorized transition tests."
+            },
+            {
+              "dimension": "performance",
+              "direction": "regresses",
+              "confidence": "low",
+              "basis": "hypothetical",
+              "assessment": "Evidence writes add database work only to control-plane actions.",
+              "validationPlan": "Load control-plane endpoints against p95 150 ms."
+            },
+            {
+              "dimension": "memory",
+              "direction": "regresses",
+              "confidence": "low",
+              "basis": "source-derived",
+              "assessment": "Bounded route metrics retain one aggregate per route.",
+              "validationPlan": "Measure route cardinality and RSS."
+            },
+            {
+              "dimension": "reliability",
+              "direction": "improves",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "State-constrained exercises and rollback evidence reduce ambiguous recovery.",
+              "validationPlan": "Complete restore and rollout exercises."
+            },
+            {
+              "dimension": "operability",
+              "direction": "improves",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "Evidence is queryable but production still needs durable telemetry export.",
+              "validationPlan": "Integrate and alert from selected telemetry backend."
+            },
+            {
+              "dimension": "migration",
+              "direction": "regresses",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "Additive tables, permissions, and operator workflows are required.",
+              "validationPlan": "Exercise forward migration and application rollback."
+            }
+          ],
+          "residualRisks": [
+            "In-process metrics are not cross-replica durable.",
+            "A privileged operator can still submit false evidence without external attestation."
+          ],
+          "implementationReadiness": {
+            "affectedComponents": [
+              "apps/api/src/operability",
+              "apps/api/src/main.ts",
+              "packages/database/prisma",
+              "docs/operations"
+            ],
+            "workPackages": [
+              "Add guarded evidence APIs.",
+              "Harden ingress.",
+              "Add runbooks and verification."
+            ],
+            "acceptanceCriteria": [
+              "Cross-tenant access is denied.",
+              "Recovery records calculate pass/fail against RPO/RTO.",
+              "High-impact decisions retain actor and reason."
+            ],
+            "migrationNotes": ["Deploy additive schema before application readers."],
+            "rollback": "Roll back application while retaining additive evidence tables."
+          }
+        }
+      ],
+      "recommendedOptionId": "central-evidence-boundary",
+      "recommendation": "Use the central evidence boundary under the current modular-monolith constraints."
+    }
+  ],
+  "openQuestions": [
+    "Which durable telemetry, backup, secret-management, and production orchestration providers will be selected?"
+  ]
+}

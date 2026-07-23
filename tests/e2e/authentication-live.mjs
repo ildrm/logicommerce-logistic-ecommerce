@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 
 const applicationUrl = process.env.E2E_BASE_URL ?? 'http://localhost:8080';
 const baseUrl = `${applicationUrl}/api/v1/auth`;
@@ -41,6 +42,34 @@ function authenticated(path, accessToken, init = {}, tenantId = tenantA) {
   });
 }
 
+function apiAuthenticated(path, accessToken, init = {}, tenantId = tenantA) {
+  return fetch(`${applicationUrl}/api/v1${path}`, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'x-tenant-id': tenantId,
+      ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...init.headers,
+    },
+  });
+}
+
+function base32Decode(input) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const bits = [...input]
+    .map((character) => alphabet.indexOf(character).toString(2).padStart(5, '0'))
+    .join('');
+  return Buffer.from((bits.match(/.{8}/gu) ?? []).map((byte) => Number.parseInt(byte, 2)));
+}
+
+function totp(secret) {
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
+  const digest = createHmac('sha1', base32Decode(secret)).update(counter).digest();
+  const offset = (digest.at(-1) ?? 0) & 0x0f;
+  return ((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0');
+}
+
 async function refresh(cookie) {
   return fetch(`${baseUrl}/refresh`, {
     method: 'POST',
@@ -76,6 +105,213 @@ async function verifyLoginRateLimit() {
   }
   const limited = await login(unknownCredentials.password, unknownCredentials);
   assert.equal(limited.response.status, 429);
+}
+
+async function verifyPhaseOneExitScenario() {
+  const admin = await login();
+  assert.equal(admin.response.status, 200);
+
+  const rolesResponse = await apiAuthenticated('/identity/roles', admin.body.accessToken);
+  assert.equal(rolesResponse.status, 200);
+  const roles = await rolesResponse.json();
+  const tenantAdmin = roles.find(({ key }) => key === 'tenant-admin');
+  assert.ok(tenantAdmin);
+
+  const suffix = Date.now();
+  const credentialResponse = await apiAuthenticated(
+    '/identity/credentials',
+    admin.body.accessToken,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `Phase One Exit Credential ${suffix}`,
+        scopes: ['tenant.configure'],
+      }),
+    },
+  );
+  assert.equal(credentialResponse.status, 201);
+  const credential = await credentialResponse.json();
+  assert.match(credential.secret, new RegExp(`^${credential.keyPrefix}\\.`));
+  const credentialList = await apiAuthenticated('/identity/credentials', admin.body.accessToken);
+  assert.equal(credentialList.status, 200);
+  const listedCredential = (await credentialList.json()).find(({ id }) => id === credential.id);
+  assert.ok(listedCredential);
+  assert.equal('secret' in listedCredential, false);
+  const machineIdentity = await fetch(`${applicationUrl}/api/v1/identity/machine/me`, {
+    headers: { 'x-api-key': credential.secret },
+  });
+  assert.equal(machineIdentity.status, 200);
+  assert.deepEqual((await machineIdentity.json()).scopes, ['tenant.configure']);
+  assert.equal(
+    (
+      await apiAuthenticated(`/identity/credentials/${credential.id}`, admin.body.accessToken, {
+        method: 'DELETE',
+      })
+    ).status,
+    204,
+  );
+  assert.equal(
+    (
+      await fetch(`${applicationUrl}/api/v1/identity/machine/me`, {
+        headers: { 'x-api-key': credential.secret },
+      })
+    ).status,
+    401,
+  );
+  const revokedCredentials = await (
+    await apiAuthenticated('/identity/credentials', admin.body.accessToken)
+  ).json();
+  assert.ok(revokedCredentials.find(({ id, revokedAt }) => id === credential.id && revokedAt));
+
+  const phaseAdmin = {
+    email: `phase-one-${suffix}@demo.logicommerce.local`,
+    password: 'Phase-One-Local-2026!',
+  };
+  const createdUser = await apiAuthenticated('/identity/users', admin.body.accessToken, {
+    method: 'POST',
+    body: JSON.stringify({
+      ...phaseAdmin,
+      displayName: 'Phase One Exit Admin',
+      roleIds: [tenantAdmin.id],
+    }),
+  });
+  assert.equal(createdUser.status, 201);
+
+  const first = await login(phaseAdmin.password, phaseAdmin);
+  assert.equal(first.response.status, 200);
+  const enrollment = await apiAuthenticated('/auth/mfa/totp/enroll', first.body.accessToken, {
+    method: 'POST',
+  });
+  assert.equal(enrollment.status, 201, await enrollment.clone().text());
+  const enrollmentBody = await enrollment.json();
+  const confirmation = await apiAuthenticated('/auth/mfa/totp/confirm', first.body.accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ code: totp(enrollmentBody.secret) }),
+  });
+  assert.equal(confirmation.status, 201);
+  const { recoveryCodes } = await confirmation.json();
+  assert.equal(recoveryCodes.length, 8);
+
+  const roleCreation = await apiAuthenticated('/identity/roles', first.body.accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ key: `exit-role-${suffix}`, name: 'Exit Scenario Role' }),
+  });
+  assert.equal(roleCreation.status, 201);
+  const role = await roleCreation.json();
+  const grant = await apiAuthenticated(
+    `/identity/roles/${role.id}/permissions`,
+    first.body.accessToken,
+    { method: 'PUT', body: JSON.stringify({ permissionKeys: ['tenant.configure'] }) },
+  );
+  assert.equal(grant.status, 200);
+
+  const missingMfa = await login(phaseAdmin.password, phaseAdmin);
+  assert.equal(missingMfa.response.status, 401);
+  const recovered = await login(phaseAdmin.password, { ...phaseAdmin, mfaCode: recoveryCodes[0] });
+  assert.equal(recovered.response.status, 200);
+  const replayedRecovery = await login(phaseAdmin.password, {
+    ...phaseAdmin,
+    mfaCode: recoveryCodes[0],
+  });
+  assert.equal(replayedRecovery.response.status, 401);
+
+  const sessionsResponse = await apiAuthenticated('/auth/sessions', recovered.body.accessToken);
+  assert.equal(sessionsResponse.status, 200);
+  const sessions = await sessionsResponse.json();
+  const otherSession = sessions.find(({ current }) => !current);
+  assert.ok(otherSession);
+  assert.equal(
+    (
+      await apiAuthenticated(`/auth/sessions/${otherSession.id}`, recovered.body.accessToken, {
+        method: 'DELETE',
+      })
+    ).status,
+    204,
+  );
+
+  assert.equal(
+    (await apiAuthenticated('/identity/users', recovered.body.accessToken, {}, tenantB)).status,
+    401,
+  );
+
+  const verificationRequest = await apiAuthenticated(
+    '/auth/email-verification/request',
+    recovered.body.accessToken,
+    { method: 'POST' },
+  );
+  assert.equal(verificationRequest.status, 201);
+  const verificationPreview = await apiAuthenticated(
+    `/identity/delivery-preview?email=${encodeURIComponent(phaseAdmin.email)}&purpose=EMAIL_VERIFICATION`,
+    admin.body.accessToken,
+  );
+  assert.equal(verificationPreview.status, 200);
+  const verificationToken = (await verificationPreview.json()).token;
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/email-verification/confirm`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: verificationToken }),
+      })
+    ).status,
+    204,
+  );
+
+  const resetRequest = await fetch(`${baseUrl}/password-reset/request`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: phaseAdmin.email }),
+  });
+  assert.equal(resetRequest.status, 201);
+  const resetPreview = await apiAuthenticated(
+    `/identity/delivery-preview?email=${encodeURIComponent(phaseAdmin.email)}&purpose=PASSWORD_RESET`,
+    admin.body.accessToken,
+  );
+  const resetToken = (await resetPreview.json()).token;
+  const nextPassword = 'Phase-One-Rotated-2026!';
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/password-reset/confirm`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, password: nextPassword }),
+      })
+    ).status,
+    204,
+  );
+  assert.equal((await login(phaseAdmin.password, phaseAdmin)).response.status, 401);
+  assert.equal(
+    (await login(nextPassword, { ...phaseAdmin, mfaCode: recoveryCodes[1] })).response.status,
+    200,
+  );
+
+  const passwordlessRequest = await fetch(`${baseUrl}/passwordless/request`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: phaseAdmin.email }),
+  });
+  assert.equal(passwordlessRequest.status, 201);
+  const passwordlessPreview = await apiAuthenticated(
+    `/identity/delivery-preview?email=${encodeURIComponent(phaseAdmin.email)}&purpose=PASSWORDLESS_LOGIN`,
+    admin.body.accessToken,
+  );
+  const passwordlessToken = (await passwordlessPreview.json()).token;
+  const passwordless = await fetch(`${baseUrl}/passwordless/consume`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: passwordlessToken, mfaCode: recoveryCodes[2] }),
+  });
+  assert.equal(passwordless.status, 201);
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/passwordless/consume`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: passwordlessToken, mfaCode: recoveryCodes[3] }),
+      })
+    ).status,
+    400,
+  );
 }
 
 async function verifyCoreFlow() {
@@ -155,6 +391,7 @@ async function verifyConcurrentReuse() {
 await verifyCoreFlow();
 await verifyConcurrentReuse();
 await verifyPermissionPolicy();
+await verifyPhaseOneExitScenario();
 await verifyLoginRateLimit();
 
 console.log('Live authentication integration: passed');

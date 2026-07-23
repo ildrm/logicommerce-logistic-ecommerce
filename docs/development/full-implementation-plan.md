@@ -65,8 +65,16 @@ metrics, unit/integration/E2E tests, and updated status/verification documents.
 1. **Completed 2026-07-22:** trusted domain resolution, auth endpoint rate
    limits, reusable permission decorators/guards, denied-action audit, and live
    integration coverage.
-2. Role/permission assignment API and accessible administration UI.
-3. Verification/reset token persistence and mock-mail workflows.
-4. TOTP enrollment/challenge/recovery codes and MFA-aware sessions.
-5. Sign-in/session UI, two-tenant non-enumeration tests, metrics, CI integration,
-   and Phase 1 exit-scenario evidence.
+2. **Completed 2026-07-23:** role/permission and user-role assignment APIs plus
+   accessible administration UI.
+3. **Completed 2026-07-23:** verification/reset/passwordless token persistence
+   and non-enumerating mock-mail workflows.
+4. **Completed 2026-07-23:** TOTP enrollment/challenge/recovery codes and
+   MFA-aware login.
+5. **Completed 2026-07-23:** sign-in/session UI, two-tenant non-enumeration,
+   machine credentials, security audit evidence, isolated CI integration, and
+   Phase 1 exit-scenario evidence.
+
+Phases 1–3 are `TESTED`. The immediate implementation target is now Phase 4:
+facilities and inbound receiving followed by fulfillment orders, warehouse
+execution, carrier adapters, shipments, tracking, and delivery.

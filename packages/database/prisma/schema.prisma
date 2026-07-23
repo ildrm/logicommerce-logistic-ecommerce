@@ -19,6 +19,16 @@ enum IdentityKind {
   SOCIAL
 }
 
+enum IdentityTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  PASSWORDLESS_LOGIN
+}
+
+enum MfaKind {
+  TOTP
+}
+
 enum InventoryState {
   EXPECTED
   INBOUND
@@ -49,55 +59,280 @@ enum OutboxStatus {
   FAILED
 }
 
+enum StoreStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+}
+
+enum PartnerStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum CatalogStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum OfferStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+}
+
+enum AttributeKind {
+  TEXT
+  NUMBER
+  BOOLEAN
+  SELECT
+}
+
+enum CartStatus {
+  ACTIVE
+  CHECKED_OUT
+  ABANDONED
+}
+
+enum PromotionKind {
+  PERCENTAGE
+  FIXED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  AUTHORIZED
+  FAILED
+  VOIDED
+}
+
+enum OrderSplitStatus {
+  PENDING
+  ACCEPTED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum WarehouseStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXCEPTION
+}
+
+enum FulfillmentStatus {
+  PENDING
+  RELEASED
+  PICKING
+  PICKED
+  PACKED
+  LABELED
+  MANIFESTED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+  EXCEPTION
+}
+
+enum C2CListingStatus {
+  DRAFT
+  PENDING_MODERATION
+  ACTIVE
+  REJECTED
+  SOLD
+  EXPIRED
+}
+
+enum C2COfferStatus {
+  OPEN
+  COUNTERED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum C2CTransactionStatus {
+  PAYMENT_HELD
+  SHIPPED
+  DELIVERED
+  DISPUTED
+  PAYOUT_ELIGIBLE
+  COMPLETED
+  CANCELLED
+}
+
+enum B2BStatus {
+  DRAFT
+  OPEN
+  SENT
+  PENDING_APPROVAL
+  APPROVED
+  ACCEPTED
+  PARTIALLY_FULFILLED
+  FULFILLED
+  ISSUED
+  PAID
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum PartnerKind {
+  SELLER
+  SUPPLIER
+  SHOP
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  RETRYING
+  DELIVERED
+  DEAD_LETTER
+}
+
 model Tenant {
-  id              String       @id @db.Char(36)
-  slug            String       @unique @db.VarChar(80)
-  name            String       @db.VarChar(160)
-  status          TenantStatus @default(ACTIVE)
-  defaultLocale   String       @default("en") @db.VarChar(20)
-  defaultCurrency String       @default("USD") @db.Char(3)
-  version         Int          @default(1)
-  createdAt       DateTime     @default(now()) @db.DateTime(3)
-  updatedAt       DateTime     @updatedAt @db.DateTime(3)
-  domains         TenantDomain[]
-  users           User[]
-  roles           Role[]
-  inventoryItems  InventoryItem[]
-  auditEvents     AuditEvent[]
-  outboxEvents    OutboxEvent[]
-  idempotencyKeys IdempotencyRecord[]
+  id                   String                  @id @db.Char(36)
+  slug                 String                  @unique @db.VarChar(80)
+  name                 String                  @db.VarChar(160)
+  status               TenantStatus            @default(ACTIVE)
+  defaultLocale        String                  @default("en") @db.VarChar(20)
+  defaultCurrency      String                  @default("USD") @db.Char(3)
+  version              Int                     @default(1)
+  createdAt            DateTime                @default(now()) @db.DateTime(3)
+  updatedAt            DateTime                @updatedAt @db.DateTime(3)
+  domains              TenantDomain[]
+  users                User[]
+  identityTokens       IdentityToken[]
+  mfaCredentials       MfaCredential[]
+  mfaRecoveryCodes     MfaRecoveryCode[]
+  apiCredentials       ApiCredential[]
+  roles                Role[]
+  stores               Store[]
+  categories           Category[]
+  attributeDefinitions AttributeDefinition[]
+  suppliers            Supplier[]
+  sellers              Seller[]
+  productSubmissions   ProductSubmission[]
+  products             Product[]
+  productVariants      ProductVariant[]
+  offers               Offer[]
+  promotions           Promotion[]
+  inventoryItems       InventoryItem[]
+  inventoryFeeds       InventoryFeed[]
+  carts                Cart[]
+  customerAddresses    CustomerAddress[]
+  orders               Order[]
+  orderLines           OrderLine[]
+  orderSplits          OrderSplit[]
+  purchaseOrders       DropshipPurchaseOrder[]
+  auditEvents          AuditEvent[]
+  outboxEvents         OutboxEvent[]
+  idempotencyKeys      IdempotencyRecord[]
 }
 
 model TenantDomain {
-  id         String   @id @db.Char(36)
-  tenantId   String   @db.Char(36)
-  hostname   String   @unique @db.VarChar(253)
-  isPrimary  Boolean  @default(false)
+  id         String    @id @db.Char(36)
+  tenantId   String    @db.Char(36)
+  hostname   String    @unique @db.VarChar(253)
+  isPrimary  Boolean   @default(false)
   verifiedAt DateTime? @db.DateTime(3)
-  createdAt  DateTime @default(now()) @db.DateTime(3)
-  updatedAt  DateTime @updatedAt @db.DateTime(3)
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now()) @db.DateTime(3)
+  updatedAt  DateTime  @updatedAt @db.DateTime(3)
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
 }
 
 model User {
-  id          String   @id @db.Char(36)
-  tenantId    String   @db.Char(36)
-  email       String   @db.VarChar(320)
-  displayName String   @db.VarChar(160)
-  isActive    Boolean  @default(true)
-  verifiedAt  DateTime? @db.DateTime(3)
-  version     Int      @default(1)
-  createdAt   DateTime @default(now()) @db.DateTime(3)
-  updatedAt   DateTime @updatedAt @db.DateTime(3)
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  identities  UserIdentity[]
-  sessions    UserSession[]
-  userRoles   UserRole[]
+  id                String            @id @db.Char(36)
+  tenantId          String            @db.Char(36)
+  email             String            @db.VarChar(320)
+  displayName       String            @db.VarChar(160)
+  isActive          Boolean           @default(true)
+  verifiedAt        DateTime?         @db.DateTime(3)
+  version           Int               @default(1)
+  createdAt         DateTime          @default(now()) @db.DateTime(3)
+  updatedAt         DateTime          @updatedAt @db.DateTime(3)
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  identities        UserIdentity[]
+  identityTokens    IdentityToken[]
+  mfaCredentials    MfaCredential[]
+  sessions          UserSession[]
+  userRoles         UserRole[]
+  carts             Cart[]
+  customerAddresses CustomerAddress[]
+  orders            Order[]
 
   @@unique([tenantId, email])
   @@index([tenantId, isActive])
+}
+
+model IdentityToken {
+  id         String               @id @db.Char(36)
+  tenantId   String               @db.Char(36)
+  userId     String?              @db.Char(36)
+  email      String               @db.VarChar(320)
+  purpose    IdentityTokenPurpose
+  tokenHash  String               @unique @db.Char(64)
+  expiresAt  DateTime             @db.DateTime(3)
+  consumedAt DateTime?            @db.DateTime(3)
+  createdAt  DateTime             @default(now()) @db.DateTime(3)
+  user       User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, email, purpose, consumedAt])
+  @@index([expiresAt])
+}
+
+model MfaCredential {
+  id               String            @id @db.Char(36)
+  tenantId         String            @db.Char(36)
+  userId           String            @db.Char(36)
+  kind             MfaKind
+  secretCiphertext String            @db.VarChar(512)
+  confirmedAt      DateTime?         @db.DateTime(3)
+  lastUsedStep     BigInt?
+  createdAt        DateTime          @default(now()) @db.DateTime(3)
+  updatedAt        DateTime          @updatedAt @db.DateTime(3)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recoveryCodes    MfaRecoveryCode[]
+
+  @@unique([tenantId, userId, kind])
+  @@index([tenantId, confirmedAt])
+}
+
+model MfaRecoveryCode {
+  id           String        @id @db.Char(36)
+  tenantId     String        @db.Char(36)
+  credentialId String        @db.Char(36)
+  codeHash     String        @unique @db.Char(64)
+  consumedAt   DateTime?     @db.DateTime(3)
+  createdAt    DateTime      @default(now()) @db.DateTime(3)
+  credential   MfaCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, credentialId, consumedAt])
 }
 
 model UserIdentity {
@@ -117,48 +352,48 @@ model UserIdentity {
 }
 
 model UserSession {
-  id              String    @id @db.Char(36)
-  tenantId        String    @db.Char(36)
-  userId          String    @db.Char(36)
-  refreshTokenHash String   @db.VarChar(255)
-  userAgentHash   String?   @db.Char(64)
-  ipPrefix        String?   @db.VarChar(64)
-  expiresAt       DateTime  @db.DateTime(3)
-  lastSeenAt      DateTime  @default(now()) @db.DateTime(3)
-  revokedAt       DateTime? @db.DateTime(3)
-  createdAt       DateTime  @default(now()) @db.DateTime(3)
-  updatedAt       DateTime  @updatedAt @db.DateTime(3)
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshTokens   RefreshToken[]
+  id               String         @id @db.Char(36)
+  tenantId         String         @db.Char(36)
+  userId           String         @db.Char(36)
+  refreshTokenHash String         @db.VarChar(255)
+  userAgentHash    String?        @db.Char(64)
+  ipPrefix         String?        @db.VarChar(64)
+  expiresAt        DateTime       @db.DateTime(3)
+  lastSeenAt       DateTime       @default(now()) @db.DateTime(3)
+  revokedAt        DateTime?      @db.DateTime(3)
+  createdAt        DateTime       @default(now()) @db.DateTime(3)
+  updatedAt        DateTime       @updatedAt @db.DateTime(3)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens    RefreshToken[]
 
   @@index([tenantId, userId, revokedAt])
 }
 
 model RefreshToken {
-  id          String    @id @db.Char(36)
-  tenantId    String    @db.Char(36)
-  sessionId   String    @db.Char(36)
-  tokenHash   String    @unique @db.Char(64)
-  familyId    String    @db.Char(36)
-  expiresAt   DateTime  @db.DateTime(3)
-  consumedAt  DateTime? @db.DateTime(3)
-  revokedAt   DateTime? @db.DateTime(3)
-  replacedById String?  @db.Char(36)
-  createdAt   DateTime  @default(now()) @db.DateTime(3)
-  session     UserSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id           String      @id @db.Char(36)
+  tenantId     String      @db.Char(36)
+  sessionId    String      @db.Char(36)
+  tokenHash    String      @unique @db.Char(64)
+  familyId     String      @db.Char(36)
+  expiresAt    DateTime    @db.DateTime(3)
+  consumedAt   DateTime?   @db.DateTime(3)
+  revokedAt    DateTime?   @db.DateTime(3)
+  replacedById String?     @db.Char(36)
+  createdAt    DateTime    @default(now()) @db.DateTime(3)
+  session      UserSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, familyId])
 }
 
 model Role {
-  id          String   @id @db.Char(36)
-  tenantId    String   @db.Char(36)
-  key         String   @db.VarChar(100)
-  name        String   @db.VarChar(160)
-  description String?  @db.VarChar(500)
-  createdAt   DateTime @default(now()) @db.DateTime(3)
-  updatedAt   DateTime @updatedAt @db.DateTime(3)
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id          String           @id @db.Char(36)
+  tenantId    String           @db.Char(36)
+  key         String           @db.VarChar(100)
+  name        String           @db.VarChar(160)
+  description String?          @db.VarChar(500)
+  createdAt   DateTime         @default(now()) @db.DateTime(3)
+  updatedAt   DateTime         @updatedAt @db.DateTime(3)
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   permissions RolePermission[]
   users       UserRole[]
 
@@ -166,11 +401,29 @@ model Role {
 }
 
 model Permission {
-  id          String   @id @db.Char(36)
-  key         String   @unique @db.VarChar(120)
-  description String   @db.VarChar(500)
-  createdAt   DateTime @default(now()) @db.DateTime(3)
+  id          String           @id @db.Char(36)
+  key         String           @unique @db.VarChar(120)
+  description String           @db.VarChar(500)
+  createdAt   DateTime         @default(now()) @db.DateTime(3)
   roles       RolePermission[]
+}
+
+model ApiCredential {
+  id         String    @id @db.Char(36)
+  tenantId   String    @db.Char(36)
+  name       String    @db.VarChar(160)
+  keyPrefix  String    @unique @db.VarChar(24)
+  secretHash String    @unique @db.Char(64)
+  scopes     Json
+  ipPolicy   Json?
+  expiresAt  DateTime? @db.DateTime(3)
+  lastUsedAt DateTime? @db.DateTime(3)
+  revokedAt  DateTime? @db.DateTime(3)
+  createdAt  DateTime  @default(now()) @db.DateTime(3)
+  updatedAt  DateTime  @updatedAt @db.DateTime(3)
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, revokedAt, expiresAt])
 }
 
 model RolePermission {
@@ -193,23 +446,378 @@ model UserRole {
   @@index([tenantId, roleId])
 }
 
+model Store {
+  id              String                @id @db.Char(36)
+  tenantId        String                @db.Char(36)
+  key             String                @db.VarChar(100)
+  name            String                @db.VarChar(160)
+  status          StoreStatus           @default(DRAFT)
+  defaultLocale   String                @default("en") @db.VarChar(20)
+  defaultCurrency String                @default("USD") @db.Char(3)
+  branding        Json?
+  seo             Json?
+  version         Int                   @default(1)
+  deletedAt       DateTime?             @db.DateTime(3)
+  createdAt       DateTime              @default(now()) @db.DateTime(3)
+  updatedAt       DateTime              @updatedAt @db.DateTime(3)
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  domains         StoreDomain[]
+  categories      Category[]
+  attributes      AttributeDefinition[]
+  submissions     ProductSubmission[]
+  products        Product[]
+  offers          Offer[]
+  promotions      Promotion[]
+  carts           Cart[]
+  orders          Order[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status, deletedAt])
+}
+
+model StoreDomain {
+  id         String    @id @db.Char(36)
+  tenantId   String    @db.Char(36)
+  storeId    String    @db.Char(36)
+  hostname   String    @unique @db.VarChar(253)
+  isPrimary  Boolean   @default(false)
+  verifiedAt DateTime? @db.DateTime(3)
+  createdAt  DateTime  @default(now()) @db.DateTime(3)
+  updatedAt  DateTime  @updatedAt @db.DateTime(3)
+  store      Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, storeId])
+}
+
+model Category {
+  id          String              @id @db.Char(36)
+  tenantId    String              @db.Char(36)
+  storeId     String              @db.Char(36)
+  parentId    String?             @db.Char(36)
+  slug        String              @db.VarChar(160)
+  name        String              @db.VarChar(160)
+  sortOrder   Int                 @default(0)
+  version     Int                 @default(1)
+  deletedAt   DateTime?           @db.DateTime(3)
+  createdAt   DateTime            @default(now()) @db.DateTime(3)
+  updatedAt   DateTime            @updatedAt @db.DateTime(3)
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  store       Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  parent      Category?           @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Category[]          @relation("CategoryTree")
+  products    Product[]
+  submissions ProductSubmission[]
+
+  @@unique([tenantId, storeId, slug])
+  @@index([tenantId, storeId, parentId, deletedAt])
+}
+
+model AttributeDefinition {
+  id         String                  @id @db.Char(36)
+  tenantId   String                  @db.Char(36)
+  storeId    String                  @db.Char(36)
+  key        String                  @db.VarChar(100)
+  name       String                  @db.VarChar(160)
+  kind       AttributeKind
+  isVariant  Boolean                 @default(false)
+  isRequired Boolean                 @default(false)
+  sortOrder  Int                     @default(0)
+  createdAt  DateTime                @default(now()) @db.DateTime(3)
+  updatedAt  DateTime                @updatedAt @db.DateTime(3)
+  tenant     Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  store      Store                   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  options    AttributeOption[]
+  values     ProductAttributeValue[]
+
+  @@unique([tenantId, storeId, key])
+  @@index([tenantId, storeId, isVariant])
+}
+
+model AttributeOption {
+  id          String                  @id @db.Char(36)
+  tenantId    String                  @db.Char(36)
+  attributeId String                  @db.Char(36)
+  value       String                  @db.VarChar(160)
+  label       String                  @db.VarChar(160)
+  sortOrder   Int                     @default(0)
+  createdAt   DateTime                @default(now()) @db.DateTime(3)
+  attribute   AttributeDefinition     @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  values      ProductAttributeValue[]
+
+  @@unique([tenantId, attributeId, value])
+  @@index([tenantId, attributeId, sortOrder])
+}
+
+model Supplier {
+  id             String                  @id @db.Char(36)
+  tenantId       String                  @db.Char(36)
+  key            String                  @db.VarChar(100)
+  name           String                  @db.VarChar(160)
+  status         PartnerStatus           @default(ACTIVE)
+  metadata       Json?
+  version        Int                     @default(1)
+  createdAt      DateTime                @default(now()) @db.DateTime(3)
+  updatedAt      DateTime                @updatedAt @db.DateTime(3)
+  tenant         Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  submissions    ProductSubmission[]
+  products       Product[]
+  offers         Offer[]
+  splits         OrderSplit[]
+  purchaseOrders DropshipPurchaseOrder[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status])
+}
+
+model Seller {
+  id        String        @id @db.Char(36)
+  tenantId  String        @db.Char(36)
+  key       String        @db.VarChar(100)
+  name      String        @db.VarChar(160)
+  status    PartnerStatus @default(ACTIVE)
+  metadata  Json?
+  version   Int           @default(1)
+  createdAt DateTime      @default(now()) @db.DateTime(3)
+  updatedAt DateTime      @updatedAt @db.DateTime(3)
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  offers    Offer[]
+  splits    OrderSplit[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status])
+}
+
+model ProductSubmission {
+  id          String                     @id @db.Char(36)
+  tenantId    String                     @db.Char(36)
+  storeId     String                     @db.Char(36)
+  supplierId  String                     @db.Char(36)
+  categoryId  String?                    @db.Char(36)
+  title       String                     @db.VarChar(240)
+  description String                     @db.Text
+  slug        String                     @db.VarChar(180)
+  locale      String                     @default("en") @db.VarChar(20)
+  seo         Json?
+  media       Json?
+  attributes  Json?
+  status      SubmissionStatus           @default(DRAFT)
+  submittedAt DateTime?                  @db.DateTime(3)
+  reviewedAt  DateTime?                  @db.DateTime(3)
+  reviewedBy  String?                    @db.Char(36)
+  reviewNote  String?                    @db.VarChar(1000)
+  productId   String?                    @unique @db.Char(36)
+  version     Int                        @default(1)
+  createdAt   DateTime                   @default(now()) @db.DateTime(3)
+  updatedAt   DateTime                   @updatedAt @db.DateTime(3)
+  tenant      Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  store       Store                      @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  supplier    Supplier                   @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  category    Category?                  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  variants    ProductSubmissionVariant[]
+  product     Product?                   @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, storeId, status, createdAt])
+  @@index([tenantId, supplierId, status])
+}
+
+model ProductSubmissionVariant {
+  id           String            @id @db.Char(36)
+  tenantId     String            @db.Char(36)
+  submissionId String            @db.Char(36)
+  sku          String            @db.VarChar(120)
+  title        String            @db.VarChar(200)
+  attributes   Json?
+  barcode      String?           @db.VarChar(80)
+  createdAt    DateTime          @default(now()) @db.DateTime(3)
+  updatedAt    DateTime          @updatedAt @db.DateTime(3)
+  submission   ProductSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, submissionId, sku])
+  @@index([tenantId, submissionId])
+}
+
+model Product {
+  id           String                  @id @db.Char(36)
+  tenantId     String                  @db.Char(36)
+  storeId      String                  @db.Char(36)
+  categoryId   String?                 @db.Char(36)
+  supplierId   String                  @db.Char(36)
+  slug         String                  @db.VarChar(180)
+  title        String                  @db.VarChar(240)
+  description  String                  @db.Text
+  status       CatalogStatus           @default(DRAFT)
+  seo          Json?
+  version      Int                     @default(1)
+  deletedAt    DateTime?               @db.DateTime(3)
+  createdAt    DateTime                @default(now()) @db.DateTime(3)
+  updatedAt    DateTime                @updatedAt @db.DateTime(3)
+  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  store        Store                   @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  category     Category?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier     Supplier                @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  submission   ProductSubmission?
+  translations ProductTranslation[]
+  media        ProductMedia[]
+  attributes   ProductAttributeValue[]
+  variants     ProductVariant[]
+
+  @@unique([tenantId, storeId, slug])
+  @@index([tenantId, storeId, status, deletedAt])
+  @@index([tenantId, categoryId, status])
+}
+
+model ProductTranslation {
+  id          String   @id @db.Char(36)
+  tenantId    String   @db.Char(36)
+  productId   String   @db.Char(36)
+  locale      String   @db.VarChar(20)
+  title       String   @db.VarChar(240)
+  description String   @db.Text
+  seo         Json?
+  createdAt   DateTime @default(now()) @db.DateTime(3)
+  updatedAt   DateTime @updatedAt @db.DateTime(3)
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, productId, locale])
+  @@index([tenantId, locale, productId])
+}
+
+model ProductMedia {
+  id        String   @id @db.Char(36)
+  tenantId  String   @db.Char(36)
+  productId String   @db.Char(36)
+  url       String   @db.VarChar(1000)
+  altText   String   @db.VarChar(500)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, productId, sortOrder])
+}
+
+model ProductAttributeValue {
+  id          String              @id @db.Char(36)
+  tenantId    String              @db.Char(36)
+  productId   String              @db.Char(36)
+  attributeId String              @db.Char(36)
+  optionId    String?             @db.Char(36)
+  value       String?             @db.VarChar(500)
+  createdAt   DateTime            @default(now()) @db.DateTime(3)
+  product     Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attribute   AttributeDefinition @relation(fields: [attributeId], references: [id], onDelete: Restrict)
+  option      AttributeOption?    @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, productId, attributeId])
+  @@index([tenantId, attributeId, optionId])
+}
+
+model ProductVariant {
+  id         String        @id @db.Char(36)
+  tenantId   String        @db.Char(36)
+  productId  String        @db.Char(36)
+  sku        String        @db.VarChar(120)
+  title      String        @db.VarChar(200)
+  barcode    String?       @db.VarChar(80)
+  attributes Json?
+  status     CatalogStatus @default(ACTIVE)
+  version    Int           @default(1)
+  deletedAt  DateTime?     @db.DateTime(3)
+  createdAt  DateTime      @default(now()) @db.DateTime(3)
+  updatedAt  DateTime      @updatedAt @db.DateTime(3)
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  product    Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  offers     Offer[]
+  orderLines OrderLine[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId, productId, status, deletedAt])
+}
+
+model Offer {
+  id              String         @id @db.Char(36)
+  tenantId        String         @db.Char(36)
+  storeId         String         @db.Char(36)
+  variantId       String         @db.Char(36)
+  sellerId        String         @db.Char(36)
+  supplierId      String         @db.Char(36)
+  currency        String         @db.Char(3)
+  priceMinor      BigInt
+  compareAtMinor  BigInt?
+  minimumQuantity Int            @default(1)
+  status          OfferStatus    @default(DRAFT)
+  availableFrom   DateTime?      @db.DateTime(3)
+  availableTo     DateTime?      @db.DateTime(3)
+  version         Int            @default(1)
+  createdAt       DateTime       @default(now()) @db.DateTime(3)
+  updatedAt       DateTime       @updatedAt @db.DateTime(3)
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  store           Store          @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  variant         ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  seller          Seller         @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  supplier        Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  cartLines       CartLine[]
+  orderLines      OrderLine[]
+
+  @@unique([tenantId, storeId, variantId, sellerId])
+  @@index([tenantId, storeId, status, priceMinor])
+  @@index([tenantId, supplierId, status])
+}
+
+model Promotion {
+  id           String        @id @db.Char(36)
+  tenantId     String        @db.Char(36)
+  storeId      String        @db.Char(36)
+  code         String        @db.VarChar(80)
+  name         String        @db.VarChar(160)
+  kind         PromotionKind
+  value        Int
+  minimumMinor BigInt        @default(0)
+  startsAt     DateTime?     @db.DateTime(3)
+  endsAt       DateTime?     @db.DateTime(3)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @db.DateTime(3)
+  updatedAt    DateTime      @updatedAt @db.DateTime(3)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  store        Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, storeId, code])
+  @@index([tenantId, storeId, isActive, startsAt, endsAt])
+}
+
 model InventoryItem {
-  id            String   @id @db.Char(36)
-  tenantId      String   @db.Char(36)
-  sku           String   @db.VarChar(120)
-  facilityId    String   @db.Char(36)
-  productRef    String   @db.Char(36)
-  allowNegative Boolean  @default(false)
-  version       Int      @default(1)
-  createdAt     DateTime @default(now()) @db.DateTime(3)
-  updatedAt     DateTime @updatedAt @db.DateTime(3)
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  id            String                 @id @db.Char(36)
+  tenantId      String                 @db.Char(36)
+  sku           String                 @db.VarChar(120)
+  facilityId    String                 @db.Char(36)
+  productRef    String                 @db.Char(36)
+  allowNegative Boolean                @default(false)
+  version       Int                    @default(1)
+  createdAt     DateTime               @default(now()) @db.DateTime(3)
+  updatedAt     DateTime               @updatedAt @db.DateTime(3)
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   balances      InventoryBalance[]
   ledgerEntries StockLedgerEntry[]
   reservations  InventoryReservation[]
+  feeds         InventoryFeed[]
 
   @@unique([tenantId, facilityId, sku])
   @@index([tenantId, productRef])
+}
+
+model InventoryFeed {
+  id              String        @id @db.Char(36)
+  tenantId        String        @db.Char(36)
+  inventoryItemId String        @db.Char(36)
+  source          String        @db.VarChar(120)
+  externalKey     String        @db.VarChar(160)
+  quantity        BigInt
+  processedAt     DateTime      @default(now()) @db.DateTime(3)
+  createdAt       DateTime      @default(now()) @db.DateTime(3)
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, source, externalKey])
+  @@index([tenantId, inventoryItemId, processedAt])
 }
 
 model InventoryBalance {
@@ -248,39 +856,216 @@ model StockLedgerEntry {
 }
 
 model InventoryReservation {
-  id              String         @id @db.Char(36)
-  tenantId        String         @db.Char(36)
-  inventoryItemId String         @db.Char(36)
-  demandType      String         @db.VarChar(80)
-  demandId        String         @db.Char(36)
+  id              String        @id @db.Char(36)
+  tenantId        String        @db.Char(36)
+  inventoryItemId String        @db.Char(36)
+  demandType      String        @db.VarChar(80)
+  demandId        String        @db.Char(36)
   quantity        BigInt
-  expiresAt       DateTime       @db.DateTime(3)
-  releasedAt      DateTime?      @db.DateTime(3)
-  createdAt       DateTime       @default(now()) @db.DateTime(3)
-  updatedAt       DateTime       @updatedAt @db.DateTime(3)
-  inventoryItem   InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  expiresAt       DateTime      @db.DateTime(3)
+  releasedAt      DateTime?     @db.DateTime(3)
+  allocatedAt     DateTime?     @db.DateTime(3)
+  createdAt       DateTime      @default(now()) @db.DateTime(3)
+  updatedAt       DateTime      @updatedAt @db.DateTime(3)
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, inventoryItemId, expiresAt])
   @@index([tenantId, demandType, demandId])
 }
 
+model Cart {
+  id            String     @id @db.Char(36)
+  tenantId      String     @db.Char(36)
+  storeId       String     @db.Char(36)
+  userId        String     @db.Char(36)
+  status        CartStatus @default(ACTIVE)
+  currency      String     @db.Char(3)
+  promotionCode String?    @db.VarChar(80)
+  version       Int        @default(1)
+  expiresAt     DateTime   @db.DateTime(3)
+  createdAt     DateTime   @default(now()) @db.DateTime(3)
+  updatedAt     DateTime   @updatedAt @db.DateTime(3)
+  tenant        Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  store         Store      @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  user          User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  lines         CartLine[]
+  order         Order?
+
+  @@index([tenantId, userId, storeId, status])
+  @@index([tenantId, expiresAt, status])
+}
+
+model CartLine {
+  id             String   @id @db.Char(36)
+  tenantId       String   @db.Char(36)
+  cartId         String   @db.Char(36)
+  offerId        String   @db.Char(36)
+  quantity       Int
+  unitPriceMinor BigInt
+  offerVersion   Int
+  createdAt      DateTime @default(now()) @db.DateTime(3)
+  updatedAt      DateTime @updatedAt @db.DateTime(3)
+  cart           Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  offer          Offer    @relation(fields: [offerId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, cartId, offerId])
+  @@index([tenantId, cartId])
+}
+
+model CustomerAddress {
+  id          String   @id @db.Char(36)
+  tenantId    String   @db.Char(36)
+  userId      String   @db.Char(36)
+  label       String   @db.VarChar(100)
+  recipient   String   @db.VarChar(160)
+  line1       String   @db.VarChar(240)
+  line2       String?  @db.VarChar(240)
+  city        String   @db.VarChar(120)
+  region      String?  @db.VarChar(120)
+  postalCode  String   @db.VarChar(40)
+  countryCode String   @db.Char(2)
+  phone       String?  @db.VarChar(40)
+  createdAt   DateTime @default(now()) @db.DateTime(3)
+  updatedAt   DateTime @updatedAt @db.DateTime(3)
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+}
+
+model Order {
+  id               String        @id @db.Char(36)
+  tenantId         String        @db.Char(36)
+  storeId          String        @db.Char(36)
+  userId           String        @db.Char(36)
+  cartId           String        @unique @db.Char(36)
+  number           String        @db.VarChar(80)
+  status           OrderStatus   @default(PENDING)
+  paymentStatus    PaymentStatus
+  currency         String        @db.Char(3)
+  subtotalMinor    BigInt
+  discountMinor    BigInt
+  taxMinor         BigInt
+  shippingMinor    BigInt
+  totalMinor       BigInt
+  addressSnapshot  Json
+  paymentReference String        @db.VarChar(160)
+  fraudDecision    String        @db.VarChar(40)
+  idempotencyKey   String        @db.VarChar(160)
+  version          Int           @default(1)
+  createdAt        DateTime      @default(now()) @db.DateTime(3)
+  updatedAt        DateTime      @updatedAt @db.DateTime(3)
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  store            Store         @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  user             User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  cart             Cart          @relation(fields: [cartId], references: [id], onDelete: Restrict)
+  lines            OrderLine[]
+  splits           OrderSplit[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, userId, createdAt])
+  @@index([tenantId, status, createdAt])
+}
+
+model OrderLine {
+  id                 String                      @id @db.Char(36)
+  tenantId           String                      @db.Char(36)
+  orderId            String                      @db.Char(36)
+  offerId            String                      @db.Char(36)
+  variantId          String                      @db.Char(36)
+  sellerId           String                      @db.Char(36)
+  supplierId         String                      @db.Char(36)
+  sku                String                      @db.VarChar(120)
+  title              String                      @db.VarChar(240)
+  quantity           Int
+  unitPriceMinor     BigInt
+  lineTotalMinor     BigInt
+  createdAt          DateTime                    @default(now()) @db.DateTime(3)
+  tenant             Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  order              Order                       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  offer              Offer                       @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  variant            ProductVariant              @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  purchaseOrderLines DropshipPurchaseOrderLine[]
+
+  @@index([tenantId, orderId])
+  @@index([tenantId, supplierId, sellerId])
+}
+
+model OrderSplit {
+  id            String                 @id @db.Char(36)
+  tenantId      String                 @db.Char(36)
+  orderId       String                 @db.Char(36)
+  sellerId      String                 @db.Char(36)
+  supplierId    String                 @db.Char(36)
+  status        OrderSplitStatus       @default(PENDING)
+  subtotalMinor BigInt
+  createdAt     DateTime               @default(now()) @db.DateTime(3)
+  updatedAt     DateTime               @updatedAt @db.DateTime(3)
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  order         Order                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  seller        Seller                 @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  supplier      Supplier               @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrder DropshipPurchaseOrder?
+
+  @@unique([tenantId, orderId, sellerId, supplierId])
+  @@index([tenantId, supplierId, status])
+}
+
+model DropshipPurchaseOrder {
+  id           String                      @id @db.Char(36)
+  tenantId     String                      @db.Char(36)
+  orderSplitId String                      @unique @db.Char(36)
+  supplierId   String                      @db.Char(36)
+  number       String                      @db.VarChar(80)
+  status       PurchaseOrderStatus         @default(PENDING)
+  currency     String                      @db.Char(3)
+  totalMinor   BigInt
+  acceptedAt   DateTime?                   @db.DateTime(3)
+  version      Int                         @default(1)
+  createdAt    DateTime                    @default(now()) @db.DateTime(3)
+  updatedAt    DateTime                    @updatedAt @db.DateTime(3)
+  tenant       Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  orderSplit   OrderSplit                  @relation(fields: [orderSplitId], references: [id], onDelete: Restrict)
+  supplier     Supplier                    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  lines        DropshipPurchaseOrderLine[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, supplierId, status])
+}
+
+model DropshipPurchaseOrderLine {
+  id              String                @id @db.Char(36)
+  tenantId        String                @db.Char(36)
+  purchaseOrderId String                @db.Char(36)
+  orderLineId     String                @db.Char(36)
+  quantity        Int
+  unitCostMinor   BigInt
+  createdAt       DateTime              @default(now()) @db.DateTime(3)
+  purchaseOrder   DropshipPurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  orderLine       OrderLine             @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, purchaseOrderId, orderLineId])
+  @@index([tenantId, orderLineId])
+}
+
 model AuditEvent {
-  id               String   @id @db.Char(36)
-  tenantId         String   @db.Char(36)
-  actorId          String?  @db.Char(36)
-  actorType        String   @db.VarChar(80)
-  action           String   @db.VarChar(160)
-  entityType       String   @db.VarChar(120)
-  entityId         String   @db.Char(36)
-  reason           String?  @db.VarChar(1000)
-  requestId        String   @db.Char(36)
-  correlationId    String   @db.Char(36)
-  metadata         Json?
-  authenticationMethod String? @db.VarChar(80)
-  approvalReference String? @db.Char(36)
-  occurredAt       DateTime @default(now()) @db.DateTime(3)
-  createdAt        DateTime @default(now()) @db.DateTime(3)
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  id                   String   @id @db.Char(36)
+  tenantId             String   @db.Char(36)
+  actorId              String?  @db.Char(36)
+  actorType            String   @db.VarChar(80)
+  action               String   @db.VarChar(160)
+  entityType           String   @db.VarChar(120)
+  entityId             String   @db.Char(36)
+  reason               String?  @db.VarChar(1000)
+  requestId            String   @db.Char(36)
+  correlationId        String   @db.Char(36)
+  metadata             Json?
+  authenticationMethod String?  @db.VarChar(80)
+  approvalReference    String?  @db.Char(36)
+  occurredAt           DateTime @default(now()) @db.DateTime(3)
+  createdAt            DateTime @default(now()) @db.DateTime(3)
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, entityType, entityId, occurredAt])
   @@index([tenantId, actorId, occurredAt])
@@ -309,19 +1094,1047 @@ model OutboxEvent {
 }
 
 model IdempotencyRecord {
-  id             String   @id @db.Char(36)
-  tenantId       String   @db.Char(36)
-  scope          String   @db.VarChar(120)
-  keyHash        String   @db.Char(64)
-  requestHash    String   @db.Char(64)
+  id             String    @id @db.Char(36)
+  tenantId       String    @db.Char(36)
+  scope          String    @db.VarChar(120)
+  keyHash        String    @db.Char(64)
+  requestHash    String    @db.Char(64)
   responseStatus Int?
   responseBody   Json?
   lockedUntil    DateTime? @db.DateTime(3)
-  expiresAt      DateTime @db.DateTime(3)
-  createdAt      DateTime @default(now()) @db.DateTime(3)
-  updatedAt      DateTime @updatedAt @db.DateTime(3)
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  expiresAt      DateTime  @db.DateTime(3)
+  createdAt      DateTime  @default(now()) @db.DateTime(3)
+  updatedAt      DateTime  @updatedAt @db.DateTime(3)
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, scope, keyHash])
   @@index([expiresAt])
+}
+
+// Phase 4: warehouse, fulfillment, carrier, and tracking.
+model Facility {
+  id        String                  @id @db.Char(36)
+  tenantId  String                  @db.Char(36)
+  key       String                  @db.VarChar(100)
+  name      String                  @db.VarChar(160)
+  address   Json
+  status    WarehouseStatus         @default(OPEN)
+  version   Int                     @default(1)
+  deletedAt DateTime?               @db.DateTime(3)
+  createdAt DateTime                @default(now()) @db.DateTime(3)
+  updatedAt DateTime                @updatedAt @db.DateTime(3)
+  bins      FacilityBin[]
+  asns      AdvanceShippingNotice[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status, deletedAt])
+}
+
+model FacilityBin {
+  id         String          @id @db.Char(36)
+  tenantId   String          @db.Char(36)
+  facilityId String          @db.Char(36)
+  code       String          @db.VarChar(100)
+  kind       String          @default("STORAGE") @db.VarChar(40)
+  capacity   Int?
+  status     WarehouseStatus @default(OPEN)
+  createdAt  DateTime        @default(now()) @db.DateTime(3)
+  updatedAt  DateTime        @updatedAt @db.DateTime(3)
+  facility   Facility        @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, facilityId, code])
+  @@index([tenantId, status])
+}
+
+model AdvanceShippingNotice {
+  id         String          @id @db.Char(36)
+  tenantId   String          @db.Char(36)
+  facilityId String          @db.Char(36)
+  supplierId String?         @db.Char(36)
+  reference  String          @db.VarChar(120)
+  status     WarehouseStatus @default(OPEN)
+  expectedAt DateTime?       @db.DateTime(3)
+  receivedAt DateTime?       @db.DateTime(3)
+  version    Int             @default(1)
+  createdAt  DateTime        @default(now()) @db.DateTime(3)
+  updatedAt  DateTime        @updatedAt @db.DateTime(3)
+  facility   Facility        @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  lines      AsnLine[]
+
+  @@unique([tenantId, reference])
+  @@index([tenantId, facilityId, status])
+}
+
+model AsnLine {
+  id              String                @id @db.Char(36)
+  tenantId        String                @db.Char(36)
+  asnId           String                @db.Char(36)
+  variantId       String                @db.Char(36)
+  inventoryItemId String?               @db.Char(36)
+  expectedQty     Int
+  receivedQty     Int                   @default(0)
+  acceptedQty     Int                   @default(0)
+  rejectedQty     Int                   @default(0)
+  inspection      String                @default("PENDING") @db.VarChar(40)
+  putawayBinId    String?               @db.Char(36)
+  putawayAt       DateTime?             @db.DateTime(3)
+  createdAt       DateTime              @default(now()) @db.DateTime(3)
+  updatedAt       DateTime              @updatedAt @db.DateTime(3)
+  asn             AdvanceShippingNotice @relation(fields: [asnId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, asnId])
+  @@index([tenantId, variantId])
+}
+
+model FulfillmentOrder {
+  id            String               @id @db.Char(36)
+  tenantId      String               @db.Char(36)
+  orderSplitId  String               @db.Char(36)
+  facilityId    String               @db.Char(36)
+  status        FulfillmentStatus    @default(PENDING)
+  slaDueAt      DateTime?            @db.DateTime(3)
+  exceptionCode String?              @db.VarChar(120)
+  version       Int                  @default(1)
+  createdAt     DateTime             @default(now()) @db.DateTime(3)
+  updatedAt     DateTime             @updatedAt @db.DateTime(3)
+  lines         FulfillmentLine[]
+  packages      FulfillmentPackage[]
+  shipments     Shipment[]
+
+  @@unique([tenantId, orderSplitId])
+  @@index([tenantId, facilityId, status, slaDueAt])
+}
+
+model FulfillmentLine {
+  id                 String           @id @db.Char(36)
+  tenantId           String           @db.Char(36)
+  fulfillmentOrderId String           @db.Char(36)
+  orderLineId        String           @db.Char(36)
+  inventoryItemId    String           @db.Char(36)
+  quantity           Int
+  pickedQty          Int              @default(0)
+  packedQty          Int              @default(0)
+  binId              String?          @db.Char(36)
+  fulfillmentOrder   FulfillmentOrder @relation(fields: [fulfillmentOrderId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, fulfillmentOrderId, orderLineId])
+  @@index([tenantId, inventoryItemId])
+}
+
+model FulfillmentPackage {
+  id                 String           @id @db.Char(36)
+  tenantId           String           @db.Char(36)
+  fulfillmentOrderId String           @db.Char(36)
+  code               String           @db.VarChar(120)
+  weightGrams        Int
+  dimensions         Json?
+  packedAt           DateTime         @default(now()) @db.DateTime(3)
+  fulfillmentOrder   FulfillmentOrder @relation(fields: [fulfillmentOrderId], references: [id], onDelete: Restrict)
+  shipment           Shipment?
+
+  @@unique([tenantId, code])
+  @@index([tenantId, fulfillmentOrderId])
+}
+
+model Shipment {
+  id                 String             @id @db.Char(36)
+  tenantId           String             @db.Char(36)
+  fulfillmentOrderId String             @db.Char(36)
+  packageId          String             @unique @db.Char(36)
+  carrierKey         String             @db.VarChar(80)
+  serviceLevel       String             @db.VarChar(80)
+  trackingNumber     String             @db.VarChar(160)
+  status             FulfillmentStatus  @default(LABELED)
+  labelUrl           String             @db.VarChar(1000)
+  rateMinor          BigInt
+  manifestedAt       DateTime?          @db.DateTime(3)
+  dispatchedAt       DateTime?          @db.DateTime(3)
+  deliveredAt        DateTime?          @db.DateTime(3)
+  version            Int                @default(1)
+  createdAt          DateTime           @default(now()) @db.DateTime(3)
+  updatedAt          DateTime           @updatedAt @db.DateTime(3)
+  fulfillmentOrder   FulfillmentOrder   @relation(fields: [fulfillmentOrderId], references: [id], onDelete: Restrict)
+  package            FulfillmentPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  events             TrackingEvent[]
+
+  @@unique([tenantId, trackingNumber])
+  @@index([tenantId, status, updatedAt])
+}
+
+model TrackingEvent {
+  id          String   @id @db.Char(36)
+  tenantId    String   @db.Char(36)
+  shipmentId  String   @db.Char(36)
+  externalKey String   @db.VarChar(160)
+  code        String   @db.VarChar(80)
+  description String   @db.VarChar(500)
+  location    String?  @db.VarChar(240)
+  occurredAt  DateTime @db.DateTime(3)
+  payload     Json?
+  createdAt   DateTime @default(now()) @db.DateTime(3)
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, shipmentId, externalKey])
+  @@index([tenantId, shipmentId, occurredAt])
+}
+
+// Phase 5: peer-to-peer marketplace and buyer protection.
+model C2CSellerProfile {
+  id                    String    @id @db.Char(36)
+  tenantId              String    @db.Char(36)
+  userId                String    @db.Char(36)
+  status                String    @default("PENDING") @db.VarChar(40)
+  verificationReference String?   @db.VarChar(160)
+  verifiedAt            DateTime? @db.DateTime(3)
+  createdAt             DateTime  @default(now()) @db.DateTime(3)
+  updatedAt             DateTime  @updatedAt @db.DateTime(3)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId, status])
+}
+
+model C2CListing {
+  id               String           @id @db.Char(36)
+  tenantId         String           @db.Char(36)
+  sellerUserId     String           @db.Char(36)
+  title            String           @db.VarChar(240)
+  description      String           @db.Text
+  conditionCode    String           @db.VarChar(40)
+  priceMinor       BigInt
+  currency         String           @db.Char(3)
+  status           C2CListingStatus @default(DRAFT)
+  moderationReason String?          @db.VarChar(1000)
+  media            Json?
+  expiresAt        DateTime         @db.DateTime(3)
+  version          Int              @default(1)
+  createdAt        DateTime         @default(now()) @db.DateTime(3)
+  updatedAt        DateTime         @updatedAt @db.DateTime(3)
+  offers           C2COffer[]
+  transaction      C2CTransaction?
+
+  @@index([tenantId, sellerUserId, status])
+  @@index([tenantId, status, createdAt])
+}
+
+model C2COffer {
+  id            String         @id @db.Char(36)
+  tenantId      String         @db.Char(36)
+  listingId     String         @db.Char(36)
+  buyerUserId   String         @db.Char(36)
+  parentOfferId String?        @db.Char(36)
+  amountMinor   BigInt
+  status        C2COfferStatus @default(OPEN)
+  expiresAt     DateTime       @db.DateTime(3)
+  acceptedAt    DateTime?      @db.DateTime(3)
+  createdAt     DateTime       @default(now()) @db.DateTime(3)
+  updatedAt     DateTime       @updatedAt @db.DateTime(3)
+  listing       C2CListing     @relation(fields: [listingId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, listingId, status])
+  @@index([tenantId, buyerUserId, status])
+}
+
+model C2CTransaction {
+  id               String               @id @db.Char(36)
+  tenantId         String               @db.Char(36)
+  listingId        String               @unique @db.Char(36)
+  acceptedOfferId  String               @unique @db.Char(36)
+  buyerUserId      String               @db.Char(36)
+  sellerUserId     String               @db.Char(36)
+  amountMinor      BigInt
+  currency         String               @db.Char(3)
+  status           C2CTransactionStatus @default(PAYMENT_HELD)
+  shipmentEvidence Json?
+  protectionEndsAt DateTime?            @db.DateTime(3)
+  payoutEligibleAt DateTime?            @db.DateTime(3)
+  payoutReleasedAt DateTime?            @db.DateTime(3)
+  createdAt        DateTime             @default(now()) @db.DateTime(3)
+  updatedAt        DateTime             @updatedAt @db.DateTime(3)
+  listing          C2CListing           @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  disputes         C2CDispute[]
+  reviews          C2CReview[]
+
+  @@index([tenantId, buyerUserId, status])
+  @@index([tenantId, sellerUserId, status])
+}
+
+model C2CDispute {
+  id            String         @id @db.Char(36)
+  tenantId      String         @db.Char(36)
+  transactionId String         @db.Char(36)
+  openedBy      String         @db.Char(36)
+  reason        String         @db.VarChar(1000)
+  status        String         @default("OPEN") @db.VarChar(40)
+  resolution    String?        @db.VarChar(1000)
+  resolvedAt    DateTime?      @db.DateTime(3)
+  createdAt     DateTime       @default(now()) @db.DateTime(3)
+  updatedAt     DateTime       @updatedAt @db.DateTime(3)
+  transaction   C2CTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, createdAt])
+}
+
+model C2CReview {
+  id            String         @id @db.Char(36)
+  tenantId      String         @db.Char(36)
+  transactionId String         @db.Char(36)
+  authorUserId  String         @db.Char(36)
+  subjectUserId String         @db.Char(36)
+  rating        Int
+  comment       String?        @db.VarChar(1000)
+  createdAt     DateTime       @default(now()) @db.DateTime(3)
+  transaction   C2CTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, transactionId, authorUserId])
+  @@index([tenantId, subjectUserId])
+}
+
+// Phase 6: business procurement, negotiated pricing, approvals, and invoices.
+model BusinessAccount {
+  id               String            @id @db.Char(36)
+  tenantId         String            @db.Char(36)
+  key              String            @db.VarChar(100)
+  name             String            @db.VarChar(160)
+  currency         String            @db.Char(3)
+  creditLimitMinor BigInt            @default(0)
+  paymentTermsDays Int               @default(30)
+  approvalMinor    BigInt            @default(0)
+  status           String            @default("ACTIVE") @db.VarChar(40)
+  version          Int               @default(1)
+  createdAt        DateTime          @default(now()) @db.DateTime(3)
+  updatedAt        DateTime          @updatedAt @db.DateTime(3)
+  members          BusinessMember[]
+  contractPrices   ContractPrice[]
+  rfqs             RequestForQuote[]
+  orders           BusinessOrder[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status])
+}
+
+model BusinessMember {
+  id              String          @id @db.Char(36)
+  tenantId        String          @db.Char(36)
+  accountId       String          @db.Char(36)
+  userId          String          @db.Char(36)
+  department      String          @db.VarChar(120)
+  role            String          @db.VarChar(40)
+  spendLimitMinor BigInt          @default(0)
+  account         BusinessAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, accountId, userId])
+  @@index([tenantId, userId])
+}
+
+model ContractPrice {
+  id              String          @id @db.Char(36)
+  tenantId        String          @db.Char(36)
+  accountId       String          @db.Char(36)
+  variantId       String          @db.Char(36)
+  minimumQuantity Int             @default(1)
+  unitPriceMinor  BigInt
+  validFrom       DateTime        @default(now()) @db.DateTime(3)
+  validTo         DateTime?       @db.DateTime(3)
+  account         BusinessAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, accountId, variantId, minimumQuantity])
+  @@index([tenantId, variantId, validFrom, validTo])
+}
+
+model RequestForQuote {
+  id          String          @id @db.Char(36)
+  tenantId    String          @db.Char(36)
+  accountId   String          @db.Char(36)
+  requesterId String          @db.Char(36)
+  currency    String          @db.Char(3)
+  status      B2BStatus       @default(OPEN)
+  expiresAt   DateTime        @db.DateTime(3)
+  createdAt   DateTime        @default(now()) @db.DateTime(3)
+  updatedAt   DateTime        @updatedAt @db.DateTime(3)
+  account     BusinessAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  lines       RfqLine[]
+  quotes      BusinessQuote[]
+
+  @@index([tenantId, accountId, status])
+}
+
+model RfqLine {
+  id          String          @id @db.Char(36)
+  tenantId    String          @db.Char(36)
+  rfqId       String          @db.Char(36)
+  variantId   String          @db.Char(36)
+  quantity    Int
+  targetMinor BigInt?
+  rfq         RequestForQuote @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, rfqId, variantId])
+}
+
+model BusinessQuote {
+  id         String              @id @db.Char(36)
+  tenantId   String              @db.Char(36)
+  rfqId      String              @db.Char(36)
+  sellerId   String?             @db.Char(36)
+  status     B2BStatus           @default(SENT)
+  totalMinor BigInt
+  validUntil DateTime            @db.DateTime(3)
+  terms      Json?
+  version    Int                 @default(1)
+  createdAt  DateTime            @default(now()) @db.DateTime(3)
+  updatedAt  DateTime            @updatedAt @db.DateTime(3)
+  rfq        RequestForQuote     @relation(fields: [rfqId], references: [id], onDelete: Restrict)
+  lines      BusinessQuoteLine[]
+  order      BusinessOrder?
+
+  @@index([tenantId, rfqId, status])
+}
+
+model BusinessQuoteLine {
+  id             String        @id @db.Char(36)
+  tenantId       String        @db.Char(36)
+  quoteId        String        @db.Char(36)
+  variantId      String        @db.Char(36)
+  quantity       Int
+  unitPriceMinor BigInt
+  quote          BusinessQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, quoteId, variantId])
+}
+
+model BusinessOrder {
+  id               String              @id @db.Char(36)
+  tenantId         String              @db.Char(36)
+  accountId        String              @db.Char(36)
+  quoteId          String              @unique @db.Char(36)
+  number           String              @db.VarChar(80)
+  purchaseOrderRef String              @db.VarChar(160)
+  status           B2BStatus           @default(PENDING_APPROVAL)
+  totalMinor       BigInt
+  paymentTermsDays Int
+  approvedBy       String?             @db.Char(36)
+  approvedAt       DateTime?           @db.DateTime(3)
+  version          Int                 @default(1)
+  createdAt        DateTime            @default(now()) @db.DateTime(3)
+  updatedAt        DateTime            @updatedAt @db.DateTime(3)
+  account          BusinessAccount     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  quote            BusinessQuote       @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  lines            BusinessOrderLine[]
+  invoices         BusinessInvoice[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, accountId, status])
+}
+
+model BusinessOrderLine {
+  id             String        @id @db.Char(36)
+  tenantId       String        @db.Char(36)
+  orderId        String        @db.Char(36)
+  variantId      String        @db.Char(36)
+  quantity       Int
+  fulfilledQty   Int           @default(0)
+  unitPriceMinor BigInt
+  order          BusinessOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, orderId, variantId])
+}
+
+model BusinessInvoice {
+  id         String        @id @db.Char(36)
+  tenantId   String        @db.Char(36)
+  orderId    String        @db.Char(36)
+  number     String        @db.VarChar(80)
+  status     B2BStatus     @default(ISSUED)
+  totalMinor BigInt
+  dueAt      DateTime      @db.DateTime(3)
+  issuedAt   DateTime      @default(now()) @db.DateTime(3)
+  paidAt     DateTime?     @db.DateTime(3)
+  order      BusinessOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, number])
+  @@index([tenantId, orderId, status])
+}
+
+// Phase 7: scoped partner credentials, idempotent Shop API, and reliable webhooks.
+model PartnerApiCredential {
+  id                 String      @id @db.Char(36)
+  tenantId           String      @db.Char(36)
+  partnerKind        PartnerKind
+  partnerId          String      @db.Char(36)
+  name               String      @db.VarChar(160)
+  keyPrefix          String      @unique @db.VarChar(24)
+  secretHash         String      @unique @db.Char(64)
+  scopes             Json
+  ipPolicy           Json?
+  rateLimitPerMinute Int         @default(120)
+  rotatedFromId      String?     @db.Char(36)
+  expiresAt          DateTime?   @db.DateTime(3)
+  lastUsedAt         DateTime?   @db.DateTime(3)
+  revokedAt          DateTime?   @db.DateTime(3)
+  createdAt          DateTime    @default(now()) @db.DateTime(3)
+  updatedAt          DateTime    @updatedAt @db.DateTime(3)
+
+  @@index([tenantId, partnerKind, partnerId, revokedAt])
+}
+
+model ShopOrder {
+  id              String          @id @db.Char(36)
+  tenantId        String          @db.Char(36)
+  partnerId       String          @db.Char(36)
+  externalKey     String          @db.VarChar(160)
+  status          String          @default("ACCEPTED") @db.VarChar(40)
+  currency        String          @db.Char(3)
+  totalMinor      BigInt
+  shippingAddress Json
+  version         Int             @default(1)
+  createdAt       DateTime        @default(now()) @db.DateTime(3)
+  updatedAt       DateTime        @updatedAt @db.DateTime(3)
+  lines           ShopOrderLine[]
+
+  @@unique([tenantId, partnerId, externalKey])
+  @@index([tenantId, partnerId, status])
+}
+
+model ShopOrderLine {
+  id             String    @id @db.Char(36)
+  tenantId       String    @db.Char(36)
+  orderId        String    @db.Char(36)
+  variantId      String    @db.Char(36)
+  quantity       Int
+  unitPriceMinor BigInt
+  order          ShopOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, orderId, variantId])
+}
+
+model WebhookEndpoint {
+  id               String            @id @db.Char(36)
+  tenantId         String            @db.Char(36)
+  partnerKind      PartnerKind
+  partnerId        String            @db.Char(36)
+  url              String            @db.VarChar(1000)
+  eventTypes       Json
+  status           String            @default("ACTIVE") @db.VarChar(40)
+  secretCiphertext String            @db.VarChar(1000)
+  secretHash       String            @db.Char(64)
+  createdAt        DateTime          @default(now()) @db.DateTime(3)
+  updatedAt        DateTime          @updatedAt @db.DateTime(3)
+  deliveries       WebhookDelivery[]
+  receipts         WebhookReceipt[]
+
+  @@index([tenantId, partnerKind, partnerId, status])
+}
+
+model WebhookDelivery {
+  id             String                @id @db.Char(36)
+  tenantId       String                @db.Char(36)
+  endpointId     String                @db.Char(36)
+  eventId        String                @db.Char(36)
+  eventType      String                @db.VarChar(160)
+  payload        Json
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  nextAttemptAt  DateTime              @default(now()) @db.DateTime(3)
+  lastStatusCode Int?
+  lastError      String?               @db.VarChar(1000)
+  signature      String?               @db.Char(64)
+  deliveredAt    DateTime?             @db.DateTime(3)
+  replayOfId     String?               @db.Char(36)
+  createdAt      DateTime              @default(now()) @db.DateTime(3)
+  updatedAt      DateTime              @updatedAt @db.DateTime(3)
+  endpoint       WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, endpointId, eventId])
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, endpointId, createdAt])
+}
+
+model WebhookReceipt {
+  id              String          @id @db.Char(36)
+  tenantId        String          @db.Char(36)
+  endpointId      String          @db.Char(36)
+  externalEventId String          @db.VarChar(160)
+  eventType       String          @db.VarChar(160)
+  payloadHash     String          @db.Char(64)
+  receivedAt      DateTime        @default(now()) @db.DateTime(3)
+  endpoint        WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, endpointId, externalEventId])
+  @@index([tenantId, receivedAt])
+}
+
+// Phase 8: reverse logistics and immutable double-entry finance.
+model ReturnAuthorization {
+  id               String       @id @db.Char(36)
+  tenantId         String       @db.Char(36)
+  orderId          String       @db.Char(36)
+  customerId       String       @db.Char(36)
+  number           String       @db.VarChar(80)
+  reasonCode       String       @db.VarChar(80)
+  requestedOutcome String       @db.VarChar(40)
+  status           String       @default("REQUESTED") @db.VarChar(40)
+  labelUrl         String?      @db.VarChar(1000)
+  trackingNumber   String?      @db.VarChar(160)
+  carrierKey       String?      @db.VarChar(80)
+  approvedBy       String?      @db.Char(36)
+  approvedAt       DateTime?    @db.DateTime(3)
+  receivedAt       DateTime?    @db.DateTime(3)
+  resolvedAt       DateTime?    @db.DateTime(3)
+  version          Int          @default(1)
+  createdAt        DateTime     @default(now()) @db.DateTime(3)
+  updatedAt        DateTime     @updatedAt @db.DateTime(3)
+  lines            ReturnLine[]
+  inspections      ReturnInspection[]
+  dispute          ReturnDispute?
+
+  @@unique([tenantId, number])
+  @@index([tenantId, orderId, status])
+  @@index([tenantId, customerId, status])
+}
+
+model ReturnLine {
+  id                    String              @id @db.Char(36)
+  tenantId              String              @db.Char(36)
+  returnAuthorizationId String              @db.Char(36)
+  orderLineId           String              @db.Char(36)
+  quantity              Int
+  receivedQuantity      Int                 @default(0)
+  disposition           String?             @db.VarChar(40)
+  resolution            String?             @db.VarChar(40)
+  refundMinor           BigInt               @default(0)
+  returnAuthorization   ReturnAuthorization @relation(fields: [returnAuthorizationId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, returnAuthorizationId, orderLineId])
+  @@index([tenantId, orderLineId])
+}
+
+model ReturnInspection {
+  id                    String              @id @db.Char(36)
+  tenantId              String              @db.Char(36)
+  returnAuthorizationId String              @db.Char(36)
+  inspectorId           String              @db.Char(36)
+  conditionCode         String              @db.VarChar(40)
+  evidence              Json?
+  note                  String?             @db.VarChar(1000)
+  inspectedAt           DateTime            @default(now()) @db.DateTime(3)
+  returnAuthorization   ReturnAuthorization @relation(fields: [returnAuthorizationId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, returnAuthorizationId, inspectedAt])
+}
+
+model ReturnDispute {
+  id                    String              @id @db.Char(36)
+  tenantId              String              @db.Char(36)
+  returnAuthorizationId String              @unique @db.Char(36)
+  openedBy              String              @db.Char(36)
+  reason                String              @db.VarChar(1000)
+  status                String              @default("OPEN") @db.VarChar(40)
+  resolution            String?             @db.VarChar(1000)
+  resolvedAt            DateTime?           @db.DateTime(3)
+  createdAt             DateTime            @default(now()) @db.DateTime(3)
+  updatedAt             DateTime            @updatedAt @db.DateTime(3)
+  returnAuthorization   ReturnAuthorization @relation(fields: [returnAuthorizationId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+}
+
+model FinancialAccount {
+  id        String        @id @db.Char(36)
+  tenantId  String        @db.Char(36)
+  code      String        @db.VarChar(40)
+  name      String        @db.VarChar(160)
+  type      String        @db.VarChar(40)
+  currency  String        @db.Char(3)
+  active    Boolean       @default(true)
+  createdAt DateTime      @default(now()) @db.DateTime(3)
+  lines     JournalLine[]
+
+  @@unique([tenantId, code, currency])
+  @@index([tenantId, type, active])
+}
+
+model JournalEntry {
+  id               String        @id @db.Char(36)
+  tenantId         String        @db.Char(36)
+  number           String        @db.VarChar(80)
+  sourceType       String        @db.VarChar(80)
+  sourceId         String        @db.Char(36)
+  description      String        @db.VarChar(500)
+  status           String        @default("POSTED") @db.VarChar(40)
+  currency         String        @db.Char(3)
+  idempotencyKey   String        @db.VarChar(160)
+  reversalOfId     String?       @db.Char(36)
+  postedBy         String        @db.Char(36)
+  postedAt         DateTime      @default(now()) @db.DateTime(3)
+  createdAt        DateTime      @default(now()) @db.DateTime(3)
+  lines            JournalLine[]
+  settlementLines  SettlementLine[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, sourceType, sourceId])
+  @@index([tenantId, reversalOfId])
+}
+
+model JournalLine {
+  id             String           @id @db.Char(36)
+  tenantId       String           @db.Char(36)
+  journalEntryId String           @db.Char(36)
+  accountId      String           @db.Char(36)
+  debitMinor     BigInt           @default(0)
+  creditMinor    BigInt           @default(0)
+  memo           String?          @db.VarChar(500)
+  journalEntry   JournalEntry     @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+  account        FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, journalEntryId])
+  @@index([tenantId, accountId])
+}
+
+model Settlement {
+  id            String           @id @db.Char(36)
+  tenantId      String           @db.Char(36)
+  partnerKind   String           @db.VarChar(40)
+  partnerId     String           @db.Char(36)
+  periodStart   DateTime         @db.DateTime(3)
+  periodEnd     DateTime         @db.DateTime(3)
+  currency      String           @db.Char(3)
+  status        String           @default("CALCULATED") @db.VarChar(40)
+  grossMinor    BigInt           @default(0)
+  feesMinor     BigInt           @default(0)
+  reserveMinor  BigInt           @default(0)
+  adjustmentMinor BigInt         @default(0)
+  netMinor      BigInt           @default(0)
+  approvedBy    String?          @db.Char(36)
+  approvedAt    DateTime?        @db.DateTime(3)
+  paidAt        DateTime?        @db.DateTime(3)
+  version       Int              @default(1)
+  createdAt     DateTime         @default(now()) @db.DateTime(3)
+  updatedAt     DateTime         @updatedAt @db.DateTime(3)
+  lines         SettlementLine[]
+
+  @@index([tenantId, partnerKind, partnerId, status])
+  @@index([tenantId, periodStart, periodEnd])
+}
+
+model SettlementLine {
+  id             String       @id @db.Char(36)
+  tenantId       String       @db.Char(36)
+  settlementId   String       @db.Char(36)
+  journalEntryId String       @db.Char(36)
+  kind           String       @db.VarChar(40)
+  amountMinor    BigInt
+  settlement     Settlement   @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, settlementId, journalEntryId, kind])
+  @@index([tenantId, journalEntryId])
+}
+
+model ReconciliationRun {
+  id              String   @id @db.Char(36)
+  tenantId        String   @db.Char(36)
+  providerKey     String   @db.VarChar(80)
+  periodStart     DateTime @db.DateTime(3)
+  periodEnd       DateTime @db.DateTime(3)
+  currency        String   @db.Char(3)
+  expectedMinor   BigInt
+  providerMinor   BigInt
+  differenceMinor BigInt
+  status          String   @db.VarChar(40)
+  evidence        Json?
+  createdBy       String   @db.Char(36)
+  createdAt       DateTime @default(now()) @db.DateTime(3)
+
+  @@index([tenantId, providerKey, status, createdAt])
+}
+
+// Phase 9: multi-client 3PL billing and human-governed 4PL orchestration.
+model LogisticsClient {
+  id        String              @id @db.Char(36)
+  tenantId  String              @db.Char(36)
+  key       String              @db.VarChar(100)
+  name      String              @db.VarChar(160)
+  status    String              @default("ACTIVE") @db.VarChar(40)
+  createdAt DateTime            @default(now()) @db.DateTime(3)
+  updatedAt DateTime            @updatedAt @db.DateTime(3)
+  contracts LogisticsContract[]
+  inventory ClientInventory[]
+  events    BillableEvent[]
+  invoices  LogisticsInvoice[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status])
+}
+
+model LogisticsContract {
+  id          String             @id @db.Char(36)
+  tenantId    String             @db.Char(36)
+  clientId    String             @db.Char(36)
+  name        String             @db.VarChar(160)
+  serviceCatalog Json
+  rateCard    Json
+  sla         Json
+  effectiveAt DateTime           @db.DateTime(3)
+  expiresAt   DateTime?          @db.DateTime(3)
+  status      String             @default("ACTIVE") @db.VarChar(40)
+  version     Int                @default(1)
+  createdAt   DateTime           @default(now()) @db.DateTime(3)
+  updatedAt   DateTime           @updatedAt @db.DateTime(3)
+  client      LogisticsClient    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  events      BillableEvent[]
+  invoices    LogisticsInvoice[]
+
+  @@index([tenantId, clientId, status])
+}
+
+model ClientInventory {
+  id              String          @id @db.Char(36)
+  tenantId        String          @db.Char(36)
+  clientId        String          @db.Char(36)
+  inventoryItemId String          @db.Char(36)
+  facilityId      String          @db.Char(36)
+  allocatedQty    BigInt          @default(0)
+  client          LogisticsClient @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, clientId, inventoryItemId])
+  @@index([tenantId, facilityId, clientId])
+}
+
+model BillableEvent {
+  id           String             @id @db.Char(36)
+  tenantId     String             @db.Char(36)
+  clientId     String             @db.Char(36)
+  contractId   String             @db.Char(36)
+  eventType    String             @db.VarChar(80)
+  sourceType   String             @db.VarChar(80)
+  sourceId     String             @db.Char(36)
+  quantity     Int
+  unitPriceMinor BigInt
+  totalMinor   BigInt
+  currency     String             @db.Char(3)
+  status       String             @default("UNBILLED") @db.VarChar(40)
+  occurredAt   DateTime           @db.DateTime(3)
+  invoiceId    String?            @db.Char(36)
+  createdAt    DateTime           @default(now()) @db.DateTime(3)
+  client       LogisticsClient    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contract     LogisticsContract  @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  invoice      LogisticsInvoice?  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, contractId, sourceType, sourceId, eventType])
+  @@index([tenantId, clientId, status, occurredAt])
+}
+
+model LogisticsInvoice {
+  id          String             @id @db.Char(36)
+  tenantId    String             @db.Char(36)
+  clientId    String             @db.Char(36)
+  contractId  String             @db.Char(36)
+  number      String             @db.VarChar(80)
+  periodStart DateTime           @db.DateTime(3)
+  periodEnd   DateTime           @db.DateTime(3)
+  currency    String             @db.Char(3)
+  totalMinor  BigInt
+  status      String             @default("ISSUED") @db.VarChar(40)
+  issuedAt    DateTime           @default(now()) @db.DateTime(3)
+  dueAt       DateTime           @db.DateTime(3)
+  client      LogisticsClient    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contract    LogisticsContract  @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  events      BillableEvent[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, clientId, status])
+}
+
+model ControlTowerException {
+  id                 String                    @id @db.Char(36)
+  tenantId           String                    @db.Char(36)
+  fulfillmentOrderId String                    @db.Char(36)
+  code               String                    @db.VarChar(80)
+  severity           String                    @db.VarChar(40)
+  status             String                    @default("OPEN") @db.VarChar(40)
+  context            Json
+  openedBy           String                    @db.Char(36)
+  resolvedAt         DateTime?                 @db.DateTime(3)
+  createdAt          DateTime                  @default(now()) @db.DateTime(3)
+  updatedAt          DateTime                  @updatedAt @db.DateTime(3)
+  recommendations    RoutingRecommendation[]
+
+  @@index([tenantId, fulfillmentOrderId, status])
+}
+
+model RoutingRecommendation {
+  id             String                @id @db.Char(36)
+  tenantId       String                @db.Char(36)
+  exceptionId    String                @db.Char(36)
+  facilityId     String                @db.Char(36)
+  providerKey    String                @db.VarChar(80)
+  costMinor      BigInt
+  slaHours       Int
+  carbonGrams    Int
+  rationale      Json
+  inputHash      String                @db.Char(64)
+  status         String                @default("PROPOSED") @db.VarChar(40)
+  approvedBy     String?               @db.Char(36)
+  approvedAt     DateTime?             @db.DateTime(3)
+  executedAt     DateTime?             @db.DateTime(3)
+  rollbackOfId   String?               @db.Char(36)
+  createdAt      DateTime              @default(now()) @db.DateTime(3)
+  exception      ControlTowerException @relation(fields: [exceptionId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, exceptionId, inputHash])
+  @@index([tenantId, exceptionId, status])
+}
+
+// Phase 10: reproducible, governed network recommendations.
+model NetworkModel {
+  id          String            @id @db.Char(36)
+  tenantId    String            @db.Char(36)
+  key         String            @db.VarChar(100)
+  version     Int
+  nodes       Json
+  lanes       Json
+  carriers    Json
+  status      String            @default("ACTIVE") @db.VarChar(40)
+  createdBy   String            @db.Char(36)
+  createdAt   DateTime          @default(now()) @db.DateTime(3)
+  runs        OptimizationRun[]
+
+  @@unique([tenantId, key, version])
+  @@index([tenantId, status])
+}
+
+model OptimizationRun {
+  id               String                       @id @db.Char(36)
+  tenantId         String                       @db.Char(36)
+  networkModelId   String                       @db.Char(36)
+  objectiveVersion String                       @db.VarChar(80)
+  algorithmVersion String                       @db.VarChar(80)
+  inputSnapshot    Json
+  constraints      Json
+  inputHash        String                       @db.Char(64)
+  outputHash       String                       @db.Char(64)
+  status           String                       @default("COMPLETED") @db.VarChar(40)
+  createdBy        String                       @db.Char(36)
+  createdAt        DateTime                     @default(now()) @db.DateTime(3)
+  model            NetworkModel                 @relation(fields: [networkModelId], references: [id], onDelete: Restrict)
+  recommendations  OptimizationRecommendation[]
+
+  @@unique([tenantId, networkModelId, objectiveVersion, algorithmVersion, inputHash])
+  @@index([tenantId, status, createdAt])
+}
+
+model OptimizationRecommendation {
+  id               String               @id @db.Char(36)
+  tenantId         String               @db.Char(36)
+  runId            String               @db.Char(36)
+  rank             Int
+  plan             Json
+  score            Int
+  forecast         Json
+  explanation      Json
+  status           String               @default("PROPOSED") @db.VarChar(40)
+  approvedBy       String?              @db.Char(36)
+  approvedAt       DateTime?            @db.DateTime(3)
+  executedAt       DateTime?            @db.DateTime(3)
+  rolledBackAt     DateTime?            @db.DateTime(3)
+  run              OptimizationRun      @relation(fields: [runId], references: [id], onDelete: Restrict)
+  outcome          OptimizationOutcome?
+
+  @@unique([tenantId, runId, rank])
+  @@index([tenantId, runId, status])
+}
+
+model OptimizationOutcome {
+  id               String                     @id @db.Char(36)
+  tenantId         String                     @db.Char(36)
+  recommendationId String                     @unique @db.Char(36)
+  actual           Json
+  variance         Json
+  measuredBy       String                     @db.Char(36)
+  measuredAt       DateTime                   @default(now()) @db.DateTime(3)
+  recommendation   OptimizationRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, measuredAt])
+}
+
+// Phase 11: operational objectives, recovery evidence, retention, and privacy.
+model ServiceLevelObjective {
+  id             String           @id @db.Char(36)
+  tenantId       String           @db.Char(36)
+  key            String           @db.VarChar(100)
+  name           String           @db.VarChar(160)
+  target         Float
+  windowDays     Int
+  indicatorQuery String           @db.VarChar(1000)
+  status         String           @default("ACTIVE") @db.VarChar(40)
+  createdAt      DateTime         @default(now()) @db.DateTime(3)
+  updatedAt      DateTime         @updatedAt @db.DateTime(3)
+  observations   SloObservation[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status])
+}
+
+model SloObservation {
+  id          String                @id @db.Char(36)
+  tenantId    String                @db.Char(36)
+  objectiveId String                @db.Char(36)
+  value       Float
+  sampleSize  Int
+  windowStart DateTime              @db.DateTime(3)
+  windowEnd   DateTime              @db.DateTime(3)
+  status      String                @db.VarChar(40)
+  recordedAt  DateTime              @default(now()) @db.DateTime(3)
+  objective   ServiceLevelObjective @relation(fields: [objectiveId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, objectiveId, windowEnd])
+}
+
+model RecoveryExercise {
+  id               String   @id @db.Char(36)
+  tenantId         String   @db.Char(36)
+  kind             String   @db.VarChar(40)
+  backupReference  String   @db.VarChar(240)
+  environment      String   @db.VarChar(80)
+  status           String   @db.VarChar(40)
+  startedAt        DateTime @db.DateTime(3)
+  completedAt      DateTime? @db.DateTime(3)
+  measuredRpoMinutes Int?
+  measuredRtoMinutes Int?
+  evidence         Json?
+  executedBy       String   @db.Char(36)
+  createdAt        DateTime @default(now()) @db.DateTime(3)
+
+  @@index([tenantId, kind, status, startedAt])
+}
+
+model DataRetentionPolicy {
+  id            String   @id @db.Char(36)
+  tenantId      String   @db.Char(36)
+  dataClass     String   @db.VarChar(120)
+  retentionDays Int
+  legalHold     Boolean  @default(false)
+  action        String   @db.VarChar(40)
+  version       Int      @default(1)
+  approvedBy    String   @db.Char(36)
+  approvedAt    DateTime @default(now()) @db.DateTime(3)
+  createdAt     DateTime @default(now()) @db.DateTime(3)
+  updatedAt     DateTime @updatedAt @db.DateTime(3)
+
+  @@unique([tenantId, dataClass])
+}
+
+model PrivacyRequest {
+  id          String   @id @db.Char(36)
+  tenantId    String   @db.Char(36)
+  subjectRef  String   @db.Char(64)
+  kind        String   @db.VarChar(40)
+  status      String   @default("RECEIVED") @db.VarChar(40)
+  requestedAt DateTime @default(now()) @db.DateTime(3)
+  dueAt       DateTime @db.DateTime(3)
+  completedAt DateTime? @db.DateTime(3)
+  evidence    Json?
+  handledBy   String?  @db.Char(36)
+
+  @@index([tenantId, status, dueAt])
 }

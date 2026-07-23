@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({ example: 'admin@demo.logicommerce.local' })
@@ -12,4 +12,10 @@ export class LoginDto {
   @MinLength(8)
   @MaxLength(1024)
   password!: string;
+
+  @ApiProperty({ required: false, description: 'Six-digit TOTP or recovery code' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^(?:\d{6}|[A-Z2-9]{4}-[A-Z2-9]{4})$/u)
+  mfaCode?: string;
 }

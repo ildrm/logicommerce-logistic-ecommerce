@@ -24,3 +24,24 @@ before allowing cross-site browser clients.
 Logout and session revocation take effect immediately because bearer-token
 authentication checks the referenced session in the database rather than
 trusting a valid JWT until expiry.
+
+Email verification, password reset, and passwordless login use
+cryptographically random, purpose-bound, expiring, single-use tokens. Persist
+only an HMAC-SHA-256 token hash. Return the same request response whether an
+identity exists to reduce account enumeration. Development may use a labeled
+in-memory delivery adapter; production must fail closed until a real mail
+adapter is configured.
+
+TOTP is the initial MFA method. Encrypt TOTP secrets at rest with AES-256-GCM
+under a dedicated field-encryption key, accept a one-step clock window, and
+atomically retain the last accepted step to prevent replay. Recovery codes are
+random, HMAC-hashed, disclosed once, and consumed atomically.
+
+External OIDC and social providers implement the provider-neutral identity port
+and registry. No concrete provider is selected by this ADR. Provider choice,
+client secrets, callback domains, assurance mapping, and account-linking policy
+require an explicit deployment decision.
+
+Machine credentials use a public prefix plus random secret. Persist only an
+HMAC hash, require explicit scopes, support expiry and revocation, and never
+return the secret after creation.

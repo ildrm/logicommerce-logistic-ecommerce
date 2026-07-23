@@ -14,8 +14,13 @@ import {
   type SessionMetadata,
 } from './auth.types.js';
 import { PasswordService } from './password.service.js';
+import { MfaService } from './mfa.service.js';
 
-export type LoginInput = { readonly email: string; readonly password: string };
+export type LoginInput = {
+  readonly email: string;
+  readonly password: string;
+  readonly mfaCode?: string;
+};
 export type IssuedAuthentication = AuthenticationResult & { readonly refreshToken: string };
 
 @Injectable()
@@ -24,6 +29,7 @@ export class AuthService {
     @Inject(AUTH_STORE) private readonly store: AuthStore,
     private readonly passwords: PasswordService,
     private readonly tokens: AuthTokenService,
+    private readonly mfa: MfaService,
   ) {}
 
   async login(
@@ -42,8 +48,17 @@ export class AuthService {
       });
       throw new UnauthorizedException('Invalid email or password');
     }
+    await this.mfa.assertLogin(context, user.id, input.mfaCode);
     const authenticatedUser = this.publicUser(user);
+    return this.issue(context, authenticatedUser, metadata, 'auth.login.succeeded');
+  }
 
+  async issue(
+    context: TenantContext,
+    authenticatedUser: AuthenticatedUser,
+    metadata: { readonly userAgent?: string; readonly ip?: string },
+    auditAction: string,
+  ): Promise<IssuedAuthentication> {
     const sessionId = randomUUID();
     const refreshToken = this.tokens.createRefreshToken();
     const refreshTokenHash = this.tokens.hashRefreshToken(refreshToken);
@@ -58,7 +73,7 @@ export class AuthService {
     });
     const principal = this.principal(authenticatedUser, sessionId);
     await this.store.recordAudit(context, {
-      action: 'auth.login.succeeded',
+      action: auditAction,
       entityId: authenticatedUser.id,
       actorId: authenticatedUser.id,
     });

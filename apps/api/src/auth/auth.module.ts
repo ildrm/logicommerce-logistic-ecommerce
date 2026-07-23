@@ -11,6 +11,9 @@ import { AuthTokenService } from './auth-token.service.js';
 import { AUTH_STORE } from './auth.types.js';
 import { PasswordService } from './password.service.js';
 import { PermissionGuard } from './permission.guard.js';
+import { MfaService } from './mfa.service.js';
+import { IdentityMailAdapter } from './identity-mail.adapter.js';
+import { RecoveryService } from './recovery.service.js';
 
 @Global()
 @Module({
@@ -26,7 +29,17 @@ import { PermissionGuard } from './permission.guard.js';
     AuthService,
     AuthGuard,
     PermissionGuard,
+    MfaService,
+    IdentityMailAdapter,
+    RecoveryService,
   ],
-  exports: [AuthGuard, PermissionGuard, AuthTokenService, AUTH_STORE],
+  exports: [
+    AuthGuard,
+    PermissionGuard,
+    AuthTokenService,
+    PasswordService,
+    IdentityMailAdapter,
+    AUTH_STORE,
+  ],
 })
 export class AuthModule {}

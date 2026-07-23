@@ -33,6 +33,7 @@ export type StoredSession = {
 
 export interface AuthStore {
   findPasswordUser(context: TenantContext, email: string): Promise<PasswordUser | null>;
+  findUserById(context: TenantContext, userId: string): Promise<AuthenticatedUser | null>;
   createSession(
     context: TenantContext,
     input: {

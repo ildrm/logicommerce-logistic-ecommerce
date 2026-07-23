@@ -23,6 +23,15 @@ import { AuthTokenService } from './auth-token.service.js';
 import { AuthService } from './auth.service.js';
 import type { AuthPrincipal } from './auth.types.js';
 import { LoginDto } from './login.dto.js';
+import { MfaCodeDto } from './mfa.dto.js';
+import { MfaService } from './mfa.service.js';
+import {
+  ConsumeIdentityTokenDto,
+  EmailRequestDto,
+  PasswordlessConsumeDto,
+  ResetPasswordDto,
+} from './recovery.dto.js';
+import { RecoveryService } from './recovery.service.js';
 
 @ApiTags('authentication')
 @Controller({ path: 'auth', version: '1' })
@@ -32,6 +41,8 @@ export class AuthController {
     private readonly tokens: AuthTokenService,
     private readonly rateLimits: AuthRateLimitService,
     private readonly contexts: TenantContextService,
+    private readonly mfa: MfaService,
+    private readonly recovery: RecoveryService,
   ) {}
 
   @Post('login')
@@ -113,6 +124,78 @@ export class AuthController {
   ): Promise<void> {
     await this.auth.logoutAll(this.contexts.get(), this.principal(request));
     void response.header('set-cookie', this.tokens.clearRefreshCookie());
+  }
+
+  @Post('mfa/totp/enroll')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  enrollMfa(@Req() request: AuthenticatedRequest) {
+    return this.mfa.enroll(this.contexts.get(), this.principal(request));
+  }
+
+  @Post('mfa/totp/confirm')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  confirmMfa(@Body() input: MfaCodeDto, @Req() request: AuthenticatedRequest) {
+    return this.mfa.confirm(this.contexts.get(), this.principal(request), input.code);
+  }
+
+  @Get('mfa')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  mfaStatus(@Req() request: AuthenticatedRequest) {
+    return this.mfa.status(this.principal(request));
+  }
+
+  @Post('email-verification/request')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  async requestEmailVerification(@Req() request: AuthenticatedRequest) {
+    const user = await this.auth.me(this.principal(request));
+    return this.recovery.request(this.contexts.get(), user.email, 'EMAIL_VERIFICATION');
+  }
+
+  @Post('email-verification/confirm')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  verifyEmail(@Body() input: ConsumeIdentityTokenDto) {
+    return this.recovery.verifyEmail(this.contexts.get(), input.token);
+  }
+
+  @Post('password-reset/request')
+  requestPasswordReset(@Body() input: EmailRequestDto) {
+    return this.recovery.request(this.contexts.get(), input.email, 'PASSWORD_RESET');
+  }
+
+  @Post('password-reset/confirm')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  resetPassword(@Body() input: ResetPasswordDto) {
+    return this.recovery.resetPassword(this.contexts.get(), input.token, input.password);
+  }
+
+  @Post('passwordless/request')
+  requestPasswordless(@Body() input: EmailRequestDto) {
+    return this.recovery.request(this.contexts.get(), input.email, 'PASSWORDLESS_LOGIN');
+  }
+
+  @Post('passwordless/consume')
+  async consumePasswordless(
+    @Body() input: PasswordlessConsumeDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) response: FastifyReply,
+  ): Promise<AuthenticationResult> {
+    const user = await this.recovery.consumePasswordless(this.contexts.get(), input.token);
+    await this.mfa.assertLogin(this.contexts.get(), user.id, input.mfaCode);
+    const result = await this.auth.issue(
+      this.contexts.get(),
+      user,
+      {
+        ...(request.headers['user-agent'] ? { userAgent: request.headers['user-agent'] } : {}),
+        ip: request.ip,
+      },
+      'auth.passwordless.succeeded',
+    );
+    void response.header('set-cookie', this.tokens.refreshCookie(result.refreshToken));
+    return this.publicResult(result);
   }
 
   private principal(request: AuthenticatedRequest): AuthPrincipal {

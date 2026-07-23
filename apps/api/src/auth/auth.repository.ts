@@ -65,6 +65,14 @@ export class AuthRepository implements AuthStore {
     return { ...this.mapUser(identity.user), passwordHash: identity.passwordHash };
   }
 
+  async findUserById(context: TenantContext, userId: string): Promise<AuthenticatedUser | null> {
+    const user = await this.database.user.findFirst({
+      where: { id: userId, tenantId: context.tenantId, isActive: true },
+      select: userSelection,
+    });
+    return user ? this.mapUser(user) : null;
+  }
+
   async createSession(
     context: TenantContext,
     input: Parameters<AuthStore['createSession']>[1],
