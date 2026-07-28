@@ -467,6 +467,38 @@ measured coverage report, and broad domain coverage remains Phase 11 work.
   against the accepted dashboard concept corrected an SVG series-fill defect
   before the passing regression.
 
+## 2026-07-28 Phase 12 freight and payments verification
+
+- Generated migration `20260728055751_phase12_transport_billing` with Prisma
+  against the existing five-migration MySQL database. Removed an unsafe
+  generated historical-FK drop block, preserved the earlier tenant boundary,
+  and added tenant foreign keys for all 29 Phase 12 tables.
+- Applied all six migrations successfully. The updated permission, billing
+  profile, rate-card, and driver-coordinator seed completed twice.
+- Direct TypeScript checks passed for API contracts, database, API, worker, and
+  web. The production Docker builds passed for API, worker, migration, and web;
+  Next.js prerendered `/freight`, `/operations/freight`,
+  `/operations/dispatch`, `/operations/billing`, and `/dashboard`.
+- Formatting, package-scoped lint, and all package typechecks passed. Unit
+  suites passed 35 tests (22 in the API). The authentication, commerce,
+  Phase 4–7 network, Phase 8–11, and Phase 12 live suites all passed.
+- Playwright passed 12/12 scenarios across desktop Chromium and Pixel 7,
+  including authenticated freight, dispatch, billing, and dashboard surfaces.
+- All eight long-lived services were healthy after activation.
+- `node tests/e2e/phase12-live.mjs` passed against `http://localhost:8080`.
+  It verified request draft/submission, estimate, binding quote publication and
+  acceptance, canonical `INV-YYYY-######` issuance, payment schedule and mock
+  allocation, subcontracted carrier/driver/vehicle setup, encrypted-phone
+  response redaction, road assignment, phone check-in idempotency, proof of
+  delivery, completion, invoice PDF, Phase 12 analytics, cross-tenant denial,
+  and insufficient-permission denial.
+- The empty provider-secret startup defect discovered by the first full stack
+  activation was corrected by treating explicit empty optional secrets as
+  absent. Production still fails closed when mock payments are selected.
+- Stripe and Coinbase live/sandbox results are intentionally not claimed:
+  repository secrets remain unset and external provider certification is a
+  release prerequisite.
+
 ## How to add a new verification entry
 
 Record the date, commit SHA, environment, exact commands, results, relevant

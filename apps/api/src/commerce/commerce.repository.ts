@@ -3,6 +3,7 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
+import { nextInvoiceNumber } from '../billing/invoice-issuance.js';
 import type {
   AddCartLineDto,
   CreateAddressDto,
@@ -788,6 +789,55 @@ export class CommerceRepository {
               status: 'CHECKED_OUT',
               promotionCode: input.quote.promotionCode,
               version: { increment: 1 },
+            },
+          });
+          const invoiceId = randomUUID();
+          const issuedAt = new Date();
+          await transaction.billingInvoice.create({
+            data: {
+              id: invoiceId,
+              tenantId: context.tenantId,
+              number: await nextInvoiceNumber(transaction, context.tenantId),
+              customerId: principal.userId,
+              commerceOrderId: order.id,
+              sourceType: 'COMMERCE_ORDER',
+              sourceId: order.id,
+              status: 'PAID',
+              currency: input.quote.currency,
+              subtotalMinor: input.quote.subtotalMinor,
+              taxMinor: input.quote.taxMinor,
+              totalMinor: input.quote.totalMinor,
+              paidMinor: input.quote.totalMinor,
+              billingSnapshot: {
+                address: input.address,
+                orderNumber: order.number,
+                paymentReference: input.paymentReference,
+              } as unknown as Prisma.InputJsonValue,
+              dueAt: issuedAt,
+              paidAt: issuedAt,
+              lines: {
+                create: cart.lines.map((line) => ({
+                  id: randomUUID(),
+                  tenantId: context.tenantId,
+                  kind: 'PRODUCT',
+                  description: line.offer.variant.title,
+                  quantity: line.quantity,
+                  unitMinor: line.unitPriceMinor,
+                  totalMinor: line.unitPriceMinor * BigInt(line.quantity),
+                })),
+              },
+              schedules: {
+                create: {
+                  id: randomUUID(),
+                  tenantId: context.tenantId,
+                  kind: 'FULL',
+                  amountMinor: input.quote.totalMinor,
+                  paidMinor: input.quote.totalMinor,
+                  dueAt: issuedAt,
+                  status: 'PAID',
+                  sequence: 1,
+                },
+              },
             },
           });
           await this.audit(transaction, context, principal, 'order.created', 'ORDER', order.id);

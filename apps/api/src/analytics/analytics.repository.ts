@@ -72,6 +72,14 @@ export class AnalyticsRepository {
       activeProducts,
       activeCarts,
       activeUsers,
+      freightRequests,
+      freightQuotes,
+      freightBookings,
+      transportLegs,
+      freightExceptions,
+      staleAssignments,
+      canonicalInvoices,
+      paymentSessions,
     ] = await Promise.all([
       this.db.order.findMany({
         where: { tenantId, createdAt: { gte: start } },
@@ -162,13 +170,52 @@ export class AnalyticsRepository {
       }),
       this.db.cart.count({ where: { tenantId, status: 'ACTIVE' } }),
       this.db.user.count({ where: { tenantId, isActive: true } }),
+      this.db.freightRequest.findMany({
+        where: { tenantId },
+        select: { status: true, createdAt: true, submittedAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: 5_000,
+      }),
+      this.db.freightQuote.findMany({
+        where: { tenantId },
+        select: { status: true, createdAt: true, publishedAt: true, validUntil: true },
+        orderBy: { createdAt: 'asc' },
+        take: 5_000,
+      }),
+      this.db.freightBooking.findMany({
+        where: { tenantId },
+        select: { status: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: 5_000,
+      }),
+      this.db.transportLeg.findMany({
+        where: { tenantId },
+        select: { mode: true, status: true, plannedArrivalAt: true },
+        take: 5_000,
+      }),
+      this.db.freightException.count({ where: { tenantId, status: 'OPEN' } }),
+      this.db.dispatchAssignment.count({
+        where: {
+          tenantId,
+          status: 'IN_TRANSIT',
+          nextCheckInAt: { lt: now },
+        },
+      }),
+      this.db.billingInvoice.findMany({
+        where: { tenantId },
+        select: { status: true, totalMinor: true, paidMinor: true, dueAt: true },
+        take: 5_000,
+      }),
+      this.db.paymentSession.groupBy({
+        by: ['status'],
+        where: { tenantId },
+        _count: { _all: true },
+      }),
     ]);
 
     const overdueFulfillment = fulfillments.filter(
       (item) =>
-        item.slaDueAt !== null &&
-        item.slaDueAt < now &&
-        !TERMINAL_FULFILLMENT.has(item.status),
+        item.slaDueAt !== null && item.slaDueAt < now && !TERMINAL_FULFILLMENT.has(item.status),
     ).length;
     const fulfillmentExceptions = fulfillments.filter(
       (item) => item.status === 'EXCEPTION' || item.exceptionCode !== null,
@@ -186,7 +233,8 @@ export class AnalyticsRepository {
     ).size;
     const openReturns = returns.filter((item) => !TERMINAL_RETURN.has(item.status)).length;
     const agingReturns = returns.filter(
-      (item) => !TERMINAL_RETURN.has(item.status) && now.getTime() - item.createdAt.getTime() > 7 * DAY,
+      (item) =>
+        !TERMINAL_RETURN.has(item.status) && now.getTime() - item.createdAt.getTime() > 7 * DAY,
     ).length;
     const reconciliationDifference = reconciliations.reduce(
       (sum, item) => sum + Math.abs(asNumber(item.differenceMinor)),
@@ -204,81 +252,187 @@ export class AnalyticsRepository {
       (inventoryByState.DAMAGED ?? 0) +
       (inventoryByState.LOST ?? 0) +
       (inventoryByState.EXPIRED ?? 0);
+    const paymentSessionCounts = Object.fromEntries(
+      paymentSessions.map((item) => [item.status, item._count._all]),
+    ) as Record<string, number>;
+    const requestBacklog = freightRequests.filter((request) =>
+      ['SUBMITTED', 'UNDER_REVIEW'].includes(request.status),
+    ).length;
+    const activeFreightBookings = freightBookings.filter(
+      (booking) => !['COMPLETED', 'CANCELLED'].includes(booking.status),
+    ).length;
+    const expiringQuotes = freightQuotes.filter(
+      (quote) =>
+        quote.status === 'PUBLISHED' &&
+        quote.validUntil >= now &&
+        quote.validUntil.getTime() <= now.getTime() + 2 * DAY,
+    ).length;
+    const publishedQuotes = freightQuotes.filter((quote) =>
+      ['PUBLISHED', 'ACCEPTED', 'DECLINED', 'EXPIRED', 'SUPERSEDED'].includes(quote.status),
+    );
+    const acceptedQuotes = freightQuotes.filter((quote) => quote.status === 'ACCEPTED').length;
+    const quoteTurnaroundSamples = freightQuotes
+      .filter((quote) => quote.publishedAt !== null)
+      .map((quote) => quote.publishedAt!.getTime() - quote.createdAt.getTime());
+    const quoteTurnaroundHours = quoteTurnaroundSamples.length
+      ? Math.round(
+          (quoteTurnaroundSamples.reduce((sum, duration) => sum + duration, 0) /
+            quoteTurnaroundSamples.length /
+            3_600_000) *
+            10,
+        ) / 10
+      : null;
+    const overdueReceivablesMinor = canonicalInvoices
+      .filter((invoice) => invoice.status !== 'PAID' && invoice.dueAt < now)
+      .reduce(
+        (sum, invoice) =>
+          sum + Math.max(0, asNumber(invoice.totalMinor) - asNumber(invoice.paidMinor)),
+        0,
+      );
+    const paymentBlocks = paymentSessionCounts.FAILED ?? 0;
+    const delayedLegs = transportLegs.filter(
+      (leg) =>
+        leg.plannedArrivalAt !== null &&
+        leg.plannedArrivalAt < now &&
+        !['ARRIVED', 'DELIVERED', 'COMPLETED', 'CANCELLED'].includes(leg.status),
+    ).length;
+    const bookingsByStatus = Object.fromEntries(
+      [...new Set(freightBookings.map((booking) => booking.status))].map((status) => [
+        status,
+        freightBookings.filter((booking) => booking.status === status).length,
+      ]),
+    );
+    const bookingsByMode = Object.fromEntries(
+      [...new Set(transportLegs.map((leg) => leg.mode))].map((mode) => [
+        mode,
+        transportLegs.filter((leg) => leg.mode === mode).length,
+      ]),
+    );
 
-    const signals = ([
-      {
-        severity: 'critical',
-        process: 'Fulfillment',
-        issue: 'Orders beyond their fulfillment SLA',
-        count: overdueFulfillment,
-        owner: 'Fulfillment team',
-        href: '/operations?focus=fulfillment',
-      },
-      {
-        severity: 'high',
-        process: 'Network',
-        issue: 'Open control-tower exceptions',
-        count: controlExceptions.length,
-        owner: 'Network control',
-        href: '/operations?focus=network',
-      },
-      {
-        severity: 'high',
-        process: 'Integrations',
-        issue: 'Webhook deliveries in dead letter',
-        count: webhookDeadLetters,
-        owner: 'Integration team',
-        href: '/platform?focus=integrations',
-      },
-      {
-        severity: 'high',
-        process: 'Inventory',
-        issue: 'Units in risk or backorder states',
-        count: inventoryRisk,
-        owner: 'Inventory team',
-        href: '/operations?focus=inventory',
-      },
-      {
-        severity: 'medium',
-        process: 'Returns',
-        issue: 'Open returns aging beyond seven days',
-        count: agingReturns,
-        owner: 'Returns team',
-        href: '/operations?focus=returns',
-      },
-      {
-        severity: 'medium',
-        process: 'B2B',
-        issue: 'Business invoices past due',
-        count: overdueInvoices,
-        owner: 'Finance team',
-        href: '/operations?focus=b2b',
-      },
-      {
-        severity: 'medium',
-        process: 'C2C',
-        issue: 'Buyer-protection disputes awaiting resolution',
-        count: c2cDisputes,
-        owner: 'Marketplace team',
-        href: '/operations?focus=c2c',
-      },
-      {
-        severity: 'high',
-        process: 'Finance',
-        issue: 'Reconciliation difference',
-        count: reconciliationDifference,
-        owner: 'Finance team',
-        href: '/operations?focus=finance',
-      },
-      {
-        severity: 'critical',
-        process: 'Privacy',
-        issue: 'Privacy requests past due',
-        count: privacyOverdue,
-        owner: 'Compliance team',
-        href: '/platform?focus=governance',
-      },
-    ] satisfies ExceptionSignal[]).filter((signal) => signal.count > 0);
+    const signals = (
+      [
+        {
+          severity: 'critical',
+          process: 'Fulfillment',
+          issue: 'Orders beyond their fulfillment SLA',
+          count: overdueFulfillment,
+          owner: 'Fulfillment team',
+          href: '/operations?focus=fulfillment',
+        },
+        {
+          severity: 'high',
+          process: 'Network',
+          issue: 'Open control-tower exceptions',
+          count: controlExceptions.length,
+          owner: 'Network control',
+          href: '/operations?focus=network',
+        },
+        {
+          severity: 'high',
+          process: 'Integrations',
+          issue: 'Webhook deliveries in dead letter',
+          count: webhookDeadLetters,
+          owner: 'Integration team',
+          href: '/platform?focus=integrations',
+        },
+        {
+          severity: 'high',
+          process: 'Inventory',
+          issue: 'Units in risk or backorder states',
+          count: inventoryRisk,
+          owner: 'Inventory team',
+          href: '/operations?focus=inventory',
+        },
+        {
+          severity: 'medium',
+          process: 'Returns',
+          issue: 'Open returns aging beyond seven days',
+          count: agingReturns,
+          owner: 'Returns team',
+          href: '/operations?focus=returns',
+        },
+        {
+          severity: 'medium',
+          process: 'B2B',
+          issue: 'Business invoices past due',
+          count: overdueInvoices,
+          owner: 'Finance team',
+          href: '/operations?focus=b2b',
+        },
+        {
+          severity: 'medium',
+          process: 'C2C',
+          issue: 'Buyer-protection disputes awaiting resolution',
+          count: c2cDisputes,
+          owner: 'Marketplace team',
+          href: '/operations?focus=c2c',
+        },
+        {
+          severity: 'high',
+          process: 'Finance',
+          issue: 'Reconciliation difference',
+          count: reconciliationDifference,
+          owner: 'Finance team',
+          href: '/operations?focus=finance',
+        },
+        {
+          severity: 'critical',
+          process: 'Privacy',
+          issue: 'Privacy requests past due',
+          count: privacyOverdue,
+          owner: 'Compliance team',
+          href: '/platform?focus=governance',
+        },
+        {
+          severity: 'high',
+          process: 'Freight',
+          issue: 'Requests awaiting review',
+          count: requestBacklog,
+          owner: 'Freight operations',
+          href: '/operations/freight',
+        },
+        {
+          severity: 'high',
+          process: 'Dispatch',
+          issue: 'Driver check-ins overdue',
+          count: staleAssignments,
+          owner: 'Driver coordination',
+          href: '/operations/dispatch',
+        },
+        {
+          severity: 'high',
+          process: 'Transportation',
+          issue: 'Open carrier or movement exceptions',
+          count: freightExceptions,
+          owner: 'Freight operations',
+          href: '/operations/dispatch',
+        },
+        {
+          severity: 'medium',
+          process: 'Quotation',
+          issue: 'Published quotes expiring within 48 hours',
+          count: expiringQuotes,
+          owner: 'Quotation team',
+          href: '/operations/freight',
+        },
+        {
+          severity: 'high',
+          process: 'Billing',
+          issue: 'Overdue canonical receivables',
+          count: overdueReceivablesMinor,
+          owner: 'Billing team',
+          href: '/operations/billing',
+        },
+        {
+          severity: 'high',
+          process: 'Payments',
+          issue: 'Failed payment sessions',
+          count: paymentBlocks,
+          owner: 'Payments team',
+          href: '/operations/billing',
+        },
+      ] satisfies ExceptionSignal[]
+    ).filter((signal) => signal.count > 0);
 
     const scorePenalty = signals.reduce((sum, signal) => {
       const weight = signal.severity === 'critical' ? 8 : signal.severity === 'high' ? 4 : 2;
@@ -288,7 +442,6 @@ export class AnalyticsRepository {
     const orderGmvMinor = orderRows.reduce((sum, order) => sum + asNumber(order.totalMinor), 0);
     const cancelledOrders = orderRows.filter((order) => order.status === 'CANCELLED').length;
     const delivered = shipments.filter((shipment) => shipment.status === 'DELIVERED').length;
-    const returnResolved = returns.filter((item) => item.status === 'RESOLVED').length;
     const settlementIssues =
       settlements.filter((item) => item.status !== 'PAID').length +
       reconciliations.filter((item) => asNumber(item.differenceMinor) !== 0).length;
@@ -315,6 +468,11 @@ export class AnalyticsRepository {
         atRiskShipments,
         openReturns,
         settlementExposureMinor: settlementExposure,
+        freightRequests: freightRequests.length,
+        activeFreightBookings,
+        staleDriverCheckIns: staleAssignments,
+        overdueReceivablesMinor,
+        paymentBlocks,
       },
       trends: {
         orders: dailySeries(days, orderRows, now),
@@ -334,12 +492,98 @@ export class AnalyticsRepository {
         return rank[left.severity] - rank[right.severity] || right.count - left.count;
       }),
       processHealth: [
-        { key: 'orders', label: 'Order intake', total: orderCount, exceptions: cancelledOrders, healthyPercent: percentage(orderCount, cancelledOrders) },
-        { key: 'inventory', label: 'Inventory', total: Object.values(inventoryByState).reduce((sum, value) => sum + value, 0), exceptions: inventoryRisk, healthyPercent: percentage(Object.values(inventoryByState).reduce((sum, value) => sum + value, 0), inventoryRisk) },
-        { key: 'fulfillment', label: 'Fulfillment', total: fulfillments.length, exceptions: Math.max(fulfillmentExceptions, overdueFulfillment), healthyPercent: percentage(fulfillments.length, Math.max(fulfillmentExceptions, overdueFulfillment)) },
-        { key: 'delivery', label: 'Delivery', total: shipments.length, exceptions: shipments.length - delivered, healthyPercent: percentage(shipments.length, shipments.length - delivered) },
-        { key: 'returns', label: 'Returns', total: returns.length, exceptions: openReturns, healthyPercent: percentage(returns.length, openReturns) },
-        { key: 'settlement', label: 'Settlement', total: settlements.length + reconciliations.length, exceptions: settlementIssues, healthyPercent: percentage(settlements.length + reconciliations.length, settlementIssues) },
+        {
+          key: 'orders',
+          label: 'Order intake',
+          total: orderCount,
+          exceptions: cancelledOrders,
+          healthyPercent: percentage(orderCount, cancelledOrders),
+        },
+        {
+          key: 'inventory',
+          label: 'Inventory',
+          total: Object.values(inventoryByState).reduce((sum, value) => sum + value, 0),
+          exceptions: inventoryRisk,
+          healthyPercent: percentage(
+            Object.values(inventoryByState).reduce((sum, value) => sum + value, 0),
+            inventoryRisk,
+          ),
+        },
+        {
+          key: 'fulfillment',
+          label: 'Fulfillment',
+          total: fulfillments.length,
+          exceptions: Math.max(fulfillmentExceptions, overdueFulfillment),
+          healthyPercent: percentage(
+            fulfillments.length,
+            Math.max(fulfillmentExceptions, overdueFulfillment),
+          ),
+        },
+        {
+          key: 'delivery',
+          label: 'Delivery',
+          total: shipments.length,
+          exceptions: shipments.length - delivered,
+          healthyPercent: percentage(shipments.length, shipments.length - delivered),
+        },
+        {
+          key: 'returns',
+          label: 'Returns',
+          total: returns.length,
+          exceptions: openReturns,
+          healthyPercent: percentage(returns.length, openReturns),
+        },
+        {
+          key: 'settlement',
+          label: 'Settlement',
+          total: settlements.length + reconciliations.length,
+          exceptions: settlementIssues,
+          healthyPercent: percentage(settlements.length + reconciliations.length, settlementIssues),
+        },
+        {
+          key: 'freight',
+          label: 'Freight requests',
+          total: freightRequests.length,
+          exceptions: requestBacklog,
+          healthyPercent: percentage(freightRequests.length, requestBacklog),
+        },
+        {
+          key: 'quotation',
+          label: 'Quotation',
+          total: publishedQuotes.length,
+          exceptions: expiringQuotes,
+          healthyPercent: percentage(publishedQuotes.length, expiringQuotes),
+        },
+        {
+          key: 'transport',
+          label: 'Transportation',
+          total: freightBookings.length,
+          exceptions: freightExceptions + delayedLegs,
+          healthyPercent: percentage(freightBookings.length, freightExceptions + delayedLegs),
+        },
+        {
+          key: 'dispatch',
+          label: 'Driver coordination',
+          total: activeFreightBookings,
+          exceptions: staleAssignments,
+          healthyPercent: percentage(activeFreightBookings, staleAssignments),
+        },
+        {
+          key: 'billing',
+          label: 'Billing and payment',
+          total: canonicalInvoices.length,
+          exceptions:
+            paymentBlocks +
+            canonicalInvoices.filter((invoice) => invoice.status !== 'PAID' && invoice.dueAt < now)
+              .length,
+          healthyPercent: percentage(
+            canonicalInvoices.length,
+            paymentBlocks +
+              canonicalInvoices.filter(
+                (invoice) => invoice.status !== 'PAID' && invoice.dueAt < now,
+              ).length,
+          ),
+        },
       ],
       inventory: {
         states: inventoryByState,
@@ -361,19 +605,135 @@ export class AnalyticsRepository {
         executed: recommendationCounts.EXECUTED ?? 0,
         rolledBack: recommendationCounts.ROLLED_BACK ?? 0,
       },
+      transportation: {
+        requestBacklog,
+        quoteTurnaroundHours,
+        quoteAcceptancePercent: publishedQuotes.length
+          ? Math.round((acceptedQuotes / publishedQuotes.length) * 1_000) / 10
+          : null,
+        expiringQuotes,
+        activeBookings: activeFreightBookings,
+        delayedLegs,
+        staleDriverCheckIns: staleAssignments,
+        carrierExceptions: freightExceptions,
+        overdueReceivablesMinor,
+        paymentBlocks,
+        bookingsByStatus,
+        bookingsByMode,
+      },
       domainActivity: [
-        { key: 'identity', label: 'Identity', value: activeUsers, context: 'active users', href: '/account' },
-        { key: 'catalog', label: 'Catalog', value: activeProducts, context: 'active products', href: '/storefront' },
-        { key: 'commerce', label: 'Commerce', value: orderCount, context: `orders in ${days} days`, href: '/operations?focus=commerce' },
-        { key: 'carts', label: 'Checkout', value: activeCarts, context: 'active carts', href: '/operations?focus=commerce' },
-        { key: 'fulfillment', label: 'Fulfillment', value: fulfillments.length, context: 'work records', href: '/operations?focus=fulfillment' },
-        { key: 'c2c', label: 'C2C', value: c2cTransactions, context: `transactions in ${days} days`, href: '/operations?focus=c2c' },
-        { key: 'b2b', label: 'B2B', value: businessOrders, context: `orders in ${days} days`, href: '/operations?focus=b2b' },
-        { key: 'partners', label: 'Shop APIs', value: partnerOrders, context: `partner orders in ${days} days`, href: '/operations?focus=integrations' },
-        { key: 'returns', label: 'Returns', value: returns.filter((item) => item.createdAt >= start).length, context: `requests in ${days} days`, href: '/operations?focus=returns' },
-        { key: 'logistics', label: '3PL / 4PL', value: logisticsClients, context: 'active clients', href: '/operations?focus=network' },
-        { key: 'optimization', label: 'Optimization', value: optimizationRuns, context: `runs in ${days} days`, href: '/operations?focus=optimization' },
-        { key: 'reliability', label: 'Reliability', value: slos.length, context: 'active objectives', href: '/platform?focus=reliability' },
+        {
+          key: 'identity',
+          label: 'Identity',
+          value: activeUsers,
+          context: 'active users',
+          href: '/account',
+        },
+        {
+          key: 'catalog',
+          label: 'Catalog',
+          value: activeProducts,
+          context: 'active products',
+          href: '/storefront',
+        },
+        {
+          key: 'commerce',
+          label: 'Commerce',
+          value: orderCount,
+          context: `orders in ${days} days`,
+          href: '/operations?focus=commerce',
+        },
+        {
+          key: 'carts',
+          label: 'Checkout',
+          value: activeCarts,
+          context: 'active carts',
+          href: '/operations?focus=commerce',
+        },
+        {
+          key: 'fulfillment',
+          label: 'Fulfillment',
+          value: fulfillments.length,
+          context: 'work records',
+          href: '/operations?focus=fulfillment',
+        },
+        {
+          key: 'c2c',
+          label: 'C2C',
+          value: c2cTransactions,
+          context: `transactions in ${days} days`,
+          href: '/operations?focus=c2c',
+        },
+        {
+          key: 'b2b',
+          label: 'B2B',
+          value: businessOrders,
+          context: `orders in ${days} days`,
+          href: '/operations?focus=b2b',
+        },
+        {
+          key: 'partners',
+          label: 'Shop APIs',
+          value: partnerOrders,
+          context: `partner orders in ${days} days`,
+          href: '/operations?focus=integrations',
+        },
+        {
+          key: 'returns',
+          label: 'Returns',
+          value: returns.filter((item) => item.createdAt >= start).length,
+          context: `requests in ${days} days`,
+          href: '/operations?focus=returns',
+        },
+        {
+          key: 'logistics',
+          label: '3PL / 4PL',
+          value: logisticsClients,
+          context: 'active clients',
+          href: '/operations?focus=network',
+        },
+        {
+          key: 'optimization',
+          label: 'Optimization',
+          value: optimizationRuns,
+          context: `runs in ${days} days`,
+          href: '/operations?focus=optimization',
+        },
+        {
+          key: 'reliability',
+          label: 'Reliability',
+          value: slos.length,
+          context: 'active objectives',
+          href: '/platform?focus=reliability',
+        },
+        {
+          key: 'freight',
+          label: 'Global freight',
+          value: freightRequests.length,
+          context: 'transport requests',
+          href: '/operations/freight',
+        },
+        {
+          key: 'dispatch',
+          label: 'Driver coordination',
+          value: staleAssignments,
+          context: 'overdue check-ins',
+          href: '/operations/dispatch',
+        },
+        {
+          key: 'billing',
+          label: 'Billing',
+          value: canonicalInvoices.length,
+          context: 'canonical invoices',
+          href: '/operations/billing',
+        },
+        {
+          key: 'payments',
+          label: 'Payments',
+          value: paymentBlocks,
+          context: 'failed sessions',
+          href: '/operations/billing',
+        },
       ],
       slos: slos.map((slo) => {
         const observation = slo.observations[0];

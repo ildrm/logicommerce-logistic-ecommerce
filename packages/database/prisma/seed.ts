@@ -9,6 +9,7 @@ const userId = '00000000-0000-4000-8000-000000000101';
 const roleId = '00000000-0000-4000-8000-000000000201';
 const viewerUserId = '00000000-0000-4000-8000-000000000103';
 const viewerRoleId = '00000000-0000-4000-8000-000000000202';
+const driverCoordinatorRoleId = '00000000-0000-4000-8000-000000000203';
 
 async function seed() {
   const passwordHash = await hash('ChangeMe-Local-Only-2026');
@@ -242,6 +243,61 @@ async function seed() {
           'privacy.manage',
           'Manage retention, legal hold, and privacy workflows.',
         ],
+        [
+          '00000000-0000-4000-8000-000000000343',
+          'transport.request.use',
+          'Create and manage customer freight requests.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000344',
+          'transport.request.manage',
+          'Review and administer freight requests.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000345',
+          'transport.quote.manage',
+          'Calculate estimates and publish binding freight quotes.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000346',
+          'transport.carrier.manage',
+          'Manage transport carriers, drivers, and vehicles.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000347',
+          'transport.dispatch.read',
+          'Read the freight dispatch board and assignments.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000348',
+          'transport.assignment.manage',
+          'Plan transport legs and manage road assignments.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000349',
+          'transport.checkin.write',
+          'Record append-only manual driver location check-ins.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000350',
+          'transport.exception.manage',
+          'Manage transport delays and check-in exceptions.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000351',
+          'billing.invoice.read',
+          'Read invoices owned by the authenticated customer.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000352',
+          'billing.manage',
+          'Issue invoices, credit notes, and refunds.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000353',
+          'payment.use',
+          'Create hosted payment sessions for owned invoices.',
+        ],
       ] as const
     ).map(([id, key, description]) =>
       database.permission.upsert({
@@ -256,6 +312,21 @@ async function seed() {
     where: { tenantId_key: { tenantId, key: 'tenant-admin' } },
     update: {},
     create: { id: roleId, tenantId, key: 'tenant-admin', name: 'Tenant administrator' },
+  });
+
+  await database.role.upsert({
+    where: { tenantId_key: { tenantId, key: 'driver-coordinator' } },
+    update: {
+      name: 'Driver coordinator',
+      description: 'Coordinates road drivers through manual check-ins and exception follow-up.',
+    },
+    create: {
+      id: driverCoordinatorRoleId,
+      tenantId,
+      key: 'driver-coordinator',
+      name: 'Driver coordinator',
+      description: 'Coordinates road drivers through manual check-ins and exception follow-up.',
+    },
   });
 
   await database.role.upsert({
@@ -274,12 +345,37 @@ async function seed() {
     ),
   );
 
-  const c2cTrade = permissions.find((permission) => permission.key === 'c2c.trade');
-  if (c2cTrade) {
+  const viewerGrants = permissions.filter((permission) =>
+    ['c2c.trade', 'transport.request.use', 'billing.invoice.read', 'payment.use'].includes(
+      permission.key,
+    ),
+  );
+  for (const permission of viewerGrants) {
     await database.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId: viewerRoleId, permissionId: c2cTrade.id } },
+      where: { roleId_permissionId: { roleId: viewerRoleId, permissionId: permission.id } },
       update: {},
-      create: { roleId: viewerRoleId, permissionId: c2cTrade.id },
+      create: { roleId: viewerRoleId, permissionId: permission.id },
+    });
+  }
+
+  const coordinatorGrants = permissions.filter((permission) =>
+    [
+      'transport.dispatch.read',
+      'transport.assignment.manage',
+      'transport.checkin.write',
+      'transport.exception.manage',
+    ].includes(permission.key),
+  );
+  for (const permission of coordinatorGrants) {
+    await database.rolePermission.upsert({
+      where: {
+        roleId_permissionId: {
+          roleId: driverCoordinatorRoleId,
+          permissionId: permission.id,
+        },
+      },
+      update: {},
+      create: { roleId: driverCoordinatorRoleId, permissionId: permission.id },
     });
   }
 
@@ -586,6 +682,7 @@ async function seed() {
 
   for (const [id, code, name, type] of [
     ['00000000-0000-4000-8000-000000000501', '1000', 'Cash and payment clearing', 'ASSET'],
+    ['00000000-0000-4000-8000-000000000507', '1100', 'Accounts receivable', 'ASSET'],
     ['00000000-0000-4000-8000-000000000502', '2000', 'Seller payable', 'LIABILITY'],
     ['00000000-0000-4000-8000-000000000503', '2100', 'Settlement reserve', 'LIABILITY'],
     ['00000000-0000-4000-8000-000000000504', '4000', 'Marketplace revenue', 'REVENUE'],
@@ -596,6 +693,56 @@ async function seed() {
       where: { tenantId_code_currency: { tenantId, code, currency: 'USD' } },
       update: { name, type, active: true },
       create: { id, tenantId, code, name, type, currency: 'USD' },
+    });
+  }
+
+  await database.billingProfile.upsert({
+    where: { tenantId },
+    update: {},
+    create: {
+      id: '00000000-0000-4000-8000-000000000520',
+      tenantId,
+      legalName: 'LogiCommerce Demo',
+      address: { line1: '1 Logistics Way', city: 'Demo City', countryCode: 'US' },
+      email: 'billing@demo.logicommerce.local',
+      defaultCurrency: 'USD',
+      defaultTermsDays: 30,
+      invoicePrefix: 'INV',
+    },
+  });
+
+  const demoRateCardId = '00000000-0000-4000-8000-000000000521';
+  await database.transportRateCard.upsert({
+    where: { tenantId_key_version: { tenantId, key: 'global-demo', version: 1 } },
+    update: { status: 'ACTIVE' },
+    create: {
+      id: demoRateCardId,
+      tenantId,
+      key: 'global-demo',
+      name: 'Global demo freight rates',
+      currency: 'USD',
+      effectiveAt: new Date('2026-01-01T00:00:00.000Z'),
+      createdBy: userId,
+    },
+  });
+  for (const [id, mode, baseMinor, perKgMinor] of [
+    ['00000000-0000-4000-8000-000000000522', 'ROAD', 20_000, 50],
+    ['00000000-0000-4000-8000-000000000523', 'SEA', 90_000, 12],
+    ['00000000-0000-4000-8000-000000000524', 'AIR', 60_000, 180],
+    ['00000000-0000-4000-8000-000000000525', 'RAIL', 45_000, 25],
+  ] as const) {
+    await database.transportRateRule.upsert({
+      where: { id },
+      update: { baseMinor, perKgMinor },
+      create: {
+        id,
+        tenantId,
+        rateCardId: demoRateCardId,
+        mode,
+        baseMinor,
+        perKgMinor,
+        minimumMinor: baseMinor,
+      },
     });
   }
 

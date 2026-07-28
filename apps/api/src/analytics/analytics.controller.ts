@@ -26,9 +26,7 @@ export class AnalyticsController {
 
   @Get('overview')
   @RequirePermissions('operability.read')
-  overview(
-    @Query('days', new DefaultValuePipe(14), ParseIntPipe) days: number,
-  ) {
+  overview(@Query('days', new DefaultValuePipe(14), ParseIntPipe) days: number) {
     if (![7, 14, 30].includes(days)) {
       throw new BadRequestException('days must be one of 7, 14, or 30');
     }

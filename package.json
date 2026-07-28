@@ -19,6 +19,7 @@
     "test:commerce:live": "node tests/e2e/commerce-live.mjs",
     "test:network:live": "node tests/e2e/network-phases-live.mjs",
     "test:phase8-11:live": "node tests/e2e/phase8-11-live.mjs",
+    "test:phase12:live": "node tests/e2e/phase12-live.mjs",
     "test:load": "k6 run tests/performance/control-plane.js",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

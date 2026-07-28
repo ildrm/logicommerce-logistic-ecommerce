@@ -38,20 +38,40 @@ export default function PlatformPage() {
       <div className="page-heading page-heading--split">
         <div>
           <h1>Platform health</h1>
-          <p className="page-subtitle">Runtime dependencies and the services that support every operational flow.</p>
+          <p className="page-subtitle">
+            Runtime dependencies and the services that support every operational flow.
+          </p>
         </div>
         <div className={`readiness readiness--${readiness}`} role="status">
           <i />
-          <span><strong>{readiness === 'checking' ? 'Checking readiness' : readiness === 'ready' ? 'API ready' : 'Readiness unavailable'}</strong>{checkedAt ? `Checked ${new Date(checkedAt).toLocaleTimeString()}` : 'Connecting to the API'}</span>
+          <span>
+            <strong>
+              {readiness === 'checking'
+                ? 'Checking readiness'
+                : readiness === 'ready'
+                  ? 'API ready'
+                  : 'Readiness unavailable'}
+            </strong>
+            {checkedAt
+              ? `Checked ${new Date(checkedAt).toLocaleTimeString()}`
+              : 'Connecting to the API'}
+          </span>
         </div>
       </div>
       <section className="platform-layout">
         <div className="service-list" role="list" aria-label="Platform services">
           {services.map(([service, detail], index) => (
             <article role="listitem" key={service}>
-              <span className="service-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-              <div><h2>{service}</h2><p>{detail}</p></div>
-              <span className={`service-state service-state--${index === 1 ? readiness : 'configured'}`}>
+              <span className="service-index" aria-hidden="true">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <div>
+                <h2>{service}</h2>
+                <p>{detail}</p>
+              </div>
+              <span
+                className={`service-state service-state--${index === 1 ? readiness : 'configured'}`}
+              >
                 {index === 1 ? readiness : 'configured'}
               </span>
             </article>
@@ -59,9 +79,16 @@ export default function PlatformPage() {
         </div>
         <aside className="platform-aside">
           <h2>Operational access</h2>
-          <p>Use the analytical dashboard for process health. Use the API reference for integration contracts and request examples.</p>
-          <a href="/dashboard">Open dashboard <span aria-hidden="true">→</span></a>
-          <a href="http://localhost:8080/api/docs">Open API reference <span aria-hidden="true">→</span></a>
+          <p>
+            Use the analytical dashboard for process health. Use the API reference for integration
+            contracts and request examples.
+          </p>
+          <a href="/dashboard">
+            Open dashboard <span aria-hidden="true">→</span>
+          </a>
+          <a href="http://localhost:8080/api/docs">
+            Open API reference <span aria-hidden="true">→</span>
+          </a>
         </aside>
       </section>
     </main>

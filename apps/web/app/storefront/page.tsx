@@ -204,7 +204,10 @@ export default function StorefrontPage() {
 
       <section className="shop-intro">
         <div className="storefront-title">
-          <div><h1>Built for the field.</h1><p>Verified offers with visible availability and accountable delivery.</p></div>
+          <div>
+            <h1>Built for the field.</h1>
+            <p>Verified offers with visible availability and accountable delivery.</p>
+          </div>
           <button className="cart-button" onClick={() => void quoteCart()}>
             Cart · {cart?.lines.reduce((sum, line) => sum + line.quantity, 0) ?? 0}
           </button>

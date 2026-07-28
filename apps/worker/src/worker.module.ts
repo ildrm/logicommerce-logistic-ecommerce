@@ -4,6 +4,7 @@ import {
   DATABASE,
   OutboxPublisher,
   ReservationExpirySweeper,
+  TransportOperationsSweeper,
   WorkerHealth,
 } from './worker.services.js';
 
@@ -12,6 +13,7 @@ import {
     { provide: DATABASE, useFactory: createDatabaseClient },
     OutboxPublisher,
     ReservationExpirySweeper,
+    TransportOperationsSweeper,
     WorkerHealth,
   ],
 })

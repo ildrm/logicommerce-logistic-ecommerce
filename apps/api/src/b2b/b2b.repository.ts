@@ -9,6 +9,7 @@ import {
 import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
+import { nextInvoiceNumber } from '../billing/invoice-issuance.js';
 import type {
   AcceptBusinessQuoteDto,
   AddBusinessMemberDto,
@@ -258,7 +259,7 @@ export class B2BRepository {
             })),
           },
         },
-        include: { lines: true },
+        include: { lines: true, account: true },
       });
       await tx.businessQuote.update({ where: { id: quoteId }, data: { status: 'ACCEPTED' } });
       await tx.requestForQuote.update({ where: { id: quote.rfqId }, data: { status: 'ACCEPTED' } });
@@ -307,7 +308,7 @@ export class B2BRepository {
           tenantId: context.tenantId,
           status: { in: ['APPROVED', 'PARTIALLY_FULFILLED'] },
         },
-        include: { lines: true },
+        include: { lines: true, account: true },
       });
       if (!order) throw new NotFoundException('Resource not found');
       for (const fulfillment of input.lines) {
@@ -329,6 +330,7 @@ export class B2BRepository {
       });
       if (complete) {
         const invoiceId = randomUUID();
+        const dueAt = new Date(Date.now() + order.paymentTermsDays * 24 * 60 * 60 * 1_000);
         await tx.businessInvoice.create({
           data: {
             id: invoiceId,
@@ -336,7 +338,49 @@ export class B2BRepository {
             orderId,
             number: `INV-${invoiceId.slice(0, 8).toUpperCase()}`,
             totalMinor: order.totalMinor,
-            dueAt: new Date(Date.now() + order.paymentTermsDays * 24 * 60 * 60 * 1_000),
+            dueAt,
+          },
+        });
+        const canonicalId = randomUUID();
+        await tx.billingInvoice.create({
+          data: {
+            id: canonicalId,
+            tenantId: context.tenantId,
+            number: await nextInvoiceNumber(tx, context.tenantId),
+            businessAccountId: order.accountId,
+            businessOrderId: order.id,
+            sourceType: 'BUSINESS_ORDER',
+            sourceId: order.id,
+            currency: order.account.currency,
+            subtotalMinor: order.totalMinor,
+            totalMinor: order.totalMinor,
+            billingSnapshot: {
+              businessAccountId: order.accountId,
+              purchaseOrderRef: order.purchaseOrderRef,
+              legacyInvoiceId: invoiceId,
+            },
+            dueAt,
+            lines: {
+              create: order.lines.map((line) => ({
+                id: randomUUID(),
+                tenantId: context.tenantId,
+                kind: 'PRODUCT',
+                description: `Business order line ${line.variantId}`,
+                quantity: line.quantity,
+                unitMinor: line.unitPriceMinor,
+                totalMinor: line.unitPriceMinor * BigInt(line.quantity),
+              })),
+            },
+            schedules: {
+              create: {
+                id: randomUUID(),
+                tenantId: context.tenantId,
+                kind: 'NET_BALANCE',
+                amountMinor: order.totalMinor,
+                dueAt,
+                sequence: 1,
+              },
+            },
           },
         });
       }

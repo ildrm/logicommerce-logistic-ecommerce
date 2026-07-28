@@ -21,20 +21,31 @@ export default function HomePage() {
             tenant-scoped operating system.
           </p>
           <div className="actions">
-            <a className="button button--primary" href="/dashboard">Open dashboard</a>
-            <a className="button button--secondary" href="/storefront">Browse storefront</a>
+            <a className="button button--primary" href="/dashboard">
+              Open dashboard
+            </a>
+            <a className="button button--secondary" href="/storefront">
+              Browse storefront
+            </a>
           </div>
         </div>
         <aside className="home-brief" aria-label="Operational promise">
           <strong>See the whole flow.</strong>
-          <p>Monitor current workload, spot exceptions, and move directly from evidence to the responsible process.</p>
-          <a href="/operations">Explore operations <span aria-hidden="true">→</span></a>
+          <p>
+            Monitor current workload, spot exceptions, and move directly from evidence to the
+            responsible process.
+          </p>
+          <a href="/operations">
+            Explore operations <span aria-hidden="true">→</span>
+          </a>
         </aside>
       </section>
       <section className="capability-list" aria-labelledby="capability-title">
         <div className="section-intro">
           <h2 id="capability-title">Connected by design.</h2>
-          <p>Each domain keeps its own controls while contributing evidence to one analytical view.</p>
+          <p>
+            Each domain keeps its own controls while contributing evidence to one analytical view.
+          </p>
         </div>
         <div>
           {capabilities.map(([title, description]) => (
@@ -45,7 +56,9 @@ export default function HomePage() {
           ))}
         </div>
       </section>
-      <footer className="site-footer">Default market: United States · Currency: USD · Storage timezone: UTC</footer>
+      <footer className="site-footer">
+        Default market: United States · Currency: USD · Storage timezone: UTC
+      </footer>
     </main>
   );
 }

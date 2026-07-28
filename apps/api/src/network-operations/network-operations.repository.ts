@@ -3,6 +3,7 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
+import { nextInvoiceNumber } from '../billing/invoice-issuance.js';
 import type {
   AssignClientInventoryDto,
   ApproveRouteDto,
@@ -173,6 +174,49 @@ export class NetworkOperationsRepository {
           currency: events[0]!.currency,
           totalMinor: events.reduce((sum, event) => sum + Number(event.totalMinor), 0),
           dueAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000),
+        },
+      });
+      const canonicalId = randomUUID();
+      await tx.billingInvoice.create({
+        data: {
+          id: canonicalId,
+          tenantId: context.tenantId,
+          number: await nextInvoiceNumber(tx, context.tenantId),
+          logisticsClientId: clientId,
+          sourceType: 'LOGISTICS_INVOICE',
+          sourceId: invoice.id,
+          currency: invoice.currency,
+          subtotalMinor: invoice.totalMinor,
+          totalMinor: invoice.totalMinor,
+          billingSnapshot: {
+            clientId,
+            contractId: input.contractId,
+            periodStart: input.periodStart,
+            periodEnd: input.periodEnd,
+            legacyInvoiceId: invoice.id,
+          },
+          dueAt: invoice.dueAt,
+          lines: {
+            create: events.map((event) => ({
+              id: randomUUID(),
+              tenantId: context.tenantId,
+              kind: event.eventType,
+              description: `${event.eventType} · ${event.sourceType}`,
+              quantity: event.quantity,
+              unitMinor: event.unitPriceMinor,
+              totalMinor: event.totalMinor,
+            })),
+          },
+          schedules: {
+            create: {
+              id: randomUUID(),
+              tenantId: context.tenantId,
+              kind: 'NET_BALANCE',
+              amountMinor: invoice.totalMinor,
+              dueAt: invoice.dueAt,
+              sequence: 1,
+            },
+          },
         },
       });
       await tx.billableEvent.updateMany({

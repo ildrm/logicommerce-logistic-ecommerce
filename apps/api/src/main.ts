@@ -23,7 +23,7 @@ async function bootstrap() {
       connectionTimeout: 10_000,
       keepAliveTimeout: 72_000,
     }),
-    { bufferLogs: true },
+    { bufferLogs: true, rawBody: true },
   );
 
   await app.register(helmet, {

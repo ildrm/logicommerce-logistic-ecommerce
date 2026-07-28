@@ -2138,3 +2138,634 @@ model PrivacyRequest {
 
   @@index([tenantId, status, dueAt])
 }
+
+// Phase 12: global freight booking, canonical billing, payments, and dispatch coordination.
+model FreightRequest {
+  id                   String            @id @db.Char(36)
+  tenantId             String            @db.Char(36)
+  number               String            @db.VarChar(80)
+  requesterId          String            @db.Char(36)
+  businessAccountId    String?           @db.Char(36)
+  status               String            @default("DRAFT") @db.VarChar(40)
+  serviceLevel         String            @default("STANDARD") @db.VarChar(40)
+  preferredModes       Json
+  incoterm             String?           @db.VarChar(20)
+  insuranceRequired    Boolean           @default(false)
+  customsRequired      Boolean           @default(false)
+  specialInstructions  String?           @db.VarChar(2000)
+  submittedAt          DateTime?         @db.DateTime(3)
+  acceptedAt           DateTime?         @db.DateTime(3)
+  cancelledAt          DateTime?         @db.DateTime(3)
+  version              Int               @default(1)
+  createdAt            DateTime          @default(now()) @db.DateTime(3)
+  updatedAt            DateTime          @updatedAt @db.DateTime(3)
+  stops                FreightStop[]
+  cargoItems           CargoItem[]
+  documents            FreightDocument[]
+  estimates            FreightEstimate[]
+  quotes               FreightQuote[]
+  booking              FreightBooking?
+
+  @@unique([tenantId, number])
+  @@index([tenantId, requesterId, status, createdAt])
+  @@index([tenantId, businessAccountId, status])
+}
+
+model FreightStop {
+  id               String         @id @db.Char(36)
+  tenantId         String         @db.Char(36)
+  requestId        String         @db.Char(36)
+  sequence         Int
+  kind             String         @db.VarChar(40)
+  locationType     String         @default("ADDRESS") @db.VarChar(40)
+  name             String         @db.VarChar(160)
+  line1            String?        @db.VarChar(240)
+  line2            String?        @db.VarChar(240)
+  city             String         @db.VarChar(120)
+  region           String?        @db.VarChar(120)
+  postalCode       String?        @db.VarChar(40)
+  countryCode      String         @db.Char(2)
+  locationCode     String?        @db.VarChar(40)
+  latitude         Float?
+  longitude        Float?
+  timeZone         String?        @db.VarChar(80)
+  windowStart      DateTime?      @db.DateTime(3)
+  windowEnd        DateTime?      @db.DateTime(3)
+  contactName      String?        @db.VarChar(160)
+  contactPhone     String?        @db.VarChar(500)
+  instructions     String?        @db.VarChar(1000)
+  request          FreightRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, requestId, sequence])
+  @@index([tenantId, countryCode, locationCode])
+}
+
+model CargoItem {
+  id                String         @id @db.Char(36)
+  tenantId          String         @db.Char(36)
+  requestId         String         @db.Char(36)
+  description       String         @db.VarChar(500)
+  commodityCode     String?        @db.VarChar(40)
+  packageType       String         @db.VarChar(40)
+  packageCount      Int
+  weightGrams       BigInt
+  volumeCubicCm     BigInt?
+  dimensions        Json?
+  declaredValueMinor BigInt        @default(0)
+  currency          String         @db.Char(3)
+  hazardous         Boolean        @default(false)
+  hazardousDetails  Json?
+  temperatureMinC   Float?
+  temperatureMaxC   Float?
+  stackable         Boolean        @default(true)
+  request           FreightRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, requestId])
+}
+
+model FreightDocument {
+  id            String         @id @db.Char(36)
+  tenantId      String         @db.Char(36)
+  requestId     String         @db.Char(36)
+  bookingId     String?        @db.Char(36)
+  kind          String         @db.VarChar(60)
+  fileName      String         @db.VarChar(240)
+  contentType   String         @db.VarChar(120)
+  sizeBytes     Int
+  checksum      String         @db.Char(64)
+  objectKey     String         @db.VarChar(500)
+  scanStatus    String         @default("QUARANTINED") @db.VarChar(40)
+  uploadedBy    String         @db.Char(36)
+  createdAt     DateTime       @default(now()) @db.DateTime(3)
+  request       FreightRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  booking       FreightBooking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, objectKey])
+  @@index([tenantId, requestId, kind])
+  @@index([tenantId, bookingId, kind])
+}
+
+model TransportRateCard {
+  id          String              @id @db.Char(36)
+  tenantId    String              @db.Char(36)
+  key         String              @db.VarChar(100)
+  name        String              @db.VarChar(160)
+  currency    String              @db.Char(3)
+  status      String              @default("ACTIVE") @db.VarChar(40)
+  effectiveAt DateTime            @db.DateTime(3)
+  expiresAt   DateTime?           @db.DateTime(3)
+  version     Int                 @default(1)
+  createdBy   String              @db.Char(36)
+  createdAt   DateTime            @default(now()) @db.DateTime(3)
+  rules       TransportRateRule[]
+
+  @@unique([tenantId, key, version])
+  @@index([tenantId, status, effectiveAt, expiresAt])
+}
+
+model TransportRateRule {
+  id                 String            @id @db.Char(36)
+  tenantId           String            @db.Char(36)
+  rateCardId         String            @db.Char(36)
+  mode               String            @db.VarChar(20)
+  originCountryCode  String?           @db.Char(2)
+  destinationCountryCode String?        @db.Char(2)
+  originLocationCode String?           @db.VarChar(40)
+  destinationLocationCode String?       @db.VarChar(40)
+  equipmentType      String?           @db.VarChar(60)
+  baseMinor          BigInt            @default(0)
+  perKgMinor         BigInt            @default(0)
+  perCubicMeterMinor BigInt            @default(0)
+  minimumMinor       BigInt            @default(0)
+  accessorials       Json?
+  priority           Int               @default(100)
+  rateCard           TransportRateCard @relation(fields: [rateCardId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, mode, originCountryCode, destinationCountryCode, priority])
+}
+
+model FreightEstimate {
+  id             String         @id @db.Char(36)
+  tenantId       String         @db.Char(36)
+  requestId      String         @db.Char(36)
+  rateCardId     String?        @db.Char(36)
+  status         String         @db.VarChar(40)
+  currency       String         @db.Char(3)
+  subtotalMinor  BigInt
+  taxMinor       BigInt         @default(0)
+  totalMinor     BigInt
+  calculation    Json
+  inputHash      String         @db.Char(64)
+  createdBy      String         @db.Char(36)
+  createdAt      DateTime       @default(now()) @db.DateTime(3)
+  request        FreightRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, requestId, inputHash])
+  @@index([tenantId, requestId, createdAt])
+}
+
+model FreightQuote {
+  id                    String            @id @db.Char(36)
+  tenantId              String            @db.Char(36)
+  requestId             String            @db.Char(36)
+  number                String            @db.VarChar(80)
+  revision              Int
+  status                String            @default("DRAFT") @db.VarChar(40)
+  currency              String            @db.Char(3)
+  subtotalMinor         BigInt
+  taxMinor              BigInt            @default(0)
+  totalMinor            BigInt
+  paymentPolicy         String            @default("PREPAY") @db.VarChar(40)
+  depositPercent        Int?
+  paymentTermsDays      Int               @default(0)
+  terms                 Json?
+  validUntil            DateTime          @db.DateTime(3)
+  supersedesId          String?           @db.Char(36)
+  createdBy             String            @db.Char(36)
+  publishedAt           DateTime?         @db.DateTime(3)
+  acceptedAt            DateTime?         @db.DateTime(3)
+  declinedAt            DateTime?         @db.DateTime(3)
+  version               Int               @default(1)
+  createdAt             DateTime          @default(now()) @db.DateTime(3)
+  updatedAt             DateTime          @updatedAt @db.DateTime(3)
+  request               FreightRequest    @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  lines                 FreightQuoteLine[]
+  booking               FreightBooking?
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, requestId, revision])
+  @@index([tenantId, requestId, status, validUntil])
+}
+
+model FreightQuoteLine {
+  id          String       @id @db.Char(36)
+  tenantId    String       @db.Char(36)
+  quoteId     String       @db.Char(36)
+  kind        String       @db.VarChar(60)
+  description String       @db.VarChar(500)
+  quantity    Int          @default(1)
+  unitMinor   BigInt
+  totalMinor  BigInt
+  taxable     Boolean      @default(true)
+  metadata    Json?
+  quote       FreightQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, quoteId])
+}
+
+model FreightBooking {
+  id              String             @id @db.Char(36)
+  tenantId        String             @db.Char(36)
+  requestId       String             @unique @db.Char(36)
+  quoteId         String             @unique @db.Char(36)
+  number          String             @db.VarChar(80)
+  status          String             @default("AWAITING_PAYMENT") @db.VarChar(40)
+  customerId      String             @db.Char(36)
+  businessAccountId String?          @db.Char(36)
+  invoiceId       String?            @unique @db.Char(36)
+  confirmedAt     DateTime?          @db.DateTime(3)
+  dispatchedAt    DateTime?          @db.DateTime(3)
+  deliveredAt     DateTime?          @db.DateTime(3)
+  completedAt     DateTime?          @db.DateTime(3)
+  version         Int                @default(1)
+  createdAt       DateTime           @default(now()) @db.DateTime(3)
+  updatedAt       DateTime           @updatedAt @db.DateTime(3)
+  request         FreightRequest     @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  quote           FreightQuote       @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  legs            TransportLeg[]
+  milestones      TransportMilestone[]
+  exceptions      FreightException[]
+  documents       FreightDocument[]
+  proofOfDelivery ProofOfDelivery?
+  invoice         BillingInvoice?    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, number])
+  @@index([tenantId, customerId, status, createdAt])
+  @@index([tenantId, businessAccountId, status])
+}
+
+model TransportCarrier {
+  id           String               @id @db.Char(36)
+  tenantId     String               @db.Char(36)
+  key          String               @db.VarChar(100)
+  name         String               @db.VarChar(160)
+  kind         String               @default("SUBCONTRACTED") @db.VarChar(40)
+  modes        Json
+  contactName  String?              @db.VarChar(160)
+  contactEmail String?              @db.VarChar(320)
+  contactPhone String?              @db.VarChar(500)
+  status       String               @default("ACTIVE") @db.VarChar(40)
+  createdAt    DateTime             @default(now()) @db.DateTime(3)
+  updatedAt    DateTime             @updatedAt @db.DateTime(3)
+  drivers      TransportDriver[]
+  vehicles     TransportVehicle[]
+  legs         TransportLeg[]
+  assignments  DispatchAssignment[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status])
+}
+
+model TransportDriver {
+  id              String               @id @db.Char(36)
+  tenantId        String               @db.Char(36)
+  carrierId       String?              @db.Char(36)
+  employeeRef     String?              @db.VarChar(100)
+  displayName     String               @db.VarChar(160)
+  phoneCiphertext String               @db.VarChar(500)
+  licenseNumber   String?              @db.VarChar(120)
+  licenseExpiresAt DateTime?           @db.DateTime(3)
+  status          String               @default("AVAILABLE") @db.VarChar(40)
+  createdAt       DateTime             @default(now()) @db.DateTime(3)
+  updatedAt       DateTime             @updatedAt @db.DateTime(3)
+  carrier         TransportCarrier?    @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+  assignments     DispatchAssignment[]
+
+  @@index([tenantId, carrierId, status])
+}
+
+model TransportVehicle {
+  id             String               @id @db.Char(36)
+  tenantId       String               @db.Char(36)
+  carrierId      String?              @db.Char(36)
+  registration   String               @db.VarChar(120)
+  equipmentType  String               @db.VarChar(60)
+  capacityKg     Int?
+  capacityCubicM Float?
+  status         String               @default("AVAILABLE") @db.VarChar(40)
+  createdAt      DateTime             @default(now()) @db.DateTime(3)
+  updatedAt      DateTime             @updatedAt @db.DateTime(3)
+  carrier        TransportCarrier?    @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+  assignments    DispatchAssignment[]
+
+  @@unique([tenantId, registration])
+  @@index([tenantId, carrierId, status])
+}
+
+model TransportLeg {
+  id                  String               @id @db.Char(36)
+  tenantId            String               @db.Char(36)
+  bookingId           String               @db.Char(36)
+  sequence            Int
+  mode                String               @db.VarChar(20)
+  originStopId        String               @db.Char(36)
+  destinationStopId   String               @db.Char(36)
+  carrierId           String?              @db.Char(36)
+  providerReference   String?              @db.VarChar(160)
+  status              String               @default("PLANNED") @db.VarChar(40)
+  plannedDepartureAt  DateTime?            @db.DateTime(3)
+  plannedArrivalAt    DateTime?            @db.DateTime(3)
+  actualDepartureAt   DateTime?            @db.DateTime(3)
+  actualArrivalAt     DateTime?            @db.DateTime(3)
+  equipment           Json?
+  createdAt           DateTime             @default(now()) @db.DateTime(3)
+  updatedAt           DateTime             @updatedAt @db.DateTime(3)
+  booking             FreightBooking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  carrier             TransportCarrier?    @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+  assignment          DispatchAssignment?
+  milestones          TransportMilestone[]
+
+  @@unique([tenantId, bookingId, sequence])
+  @@index([tenantId, mode, status, plannedArrivalAt])
+}
+
+model TransportMilestone {
+  id          String         @id @db.Char(36)
+  tenantId    String         @db.Char(36)
+  bookingId   String         @db.Char(36)
+  legId       String?        @db.Char(36)
+  code        String         @db.VarChar(80)
+  description String         @db.VarChar(500)
+  location    String?        @db.VarChar(240)
+  latitude    Float?
+  longitude   Float?
+  occurredAt  DateTime       @db.DateTime(3)
+  source      String         @db.VarChar(40)
+  recordedBy  String?        @db.Char(36)
+  externalKey String         @db.VarChar(160)
+  payload     Json?
+  createdAt   DateTime       @default(now()) @db.DateTime(3)
+  booking     FreightBooking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  leg         TransportLeg?  @relation(fields: [legId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, bookingId, externalKey])
+  @@index([tenantId, bookingId, occurredAt])
+}
+
+model FreightException {
+  id          String         @id @db.Char(36)
+  tenantId    String         @db.Char(36)
+  bookingId   String         @db.Char(36)
+  assignmentId String?       @db.Char(36)
+  code        String         @db.VarChar(80)
+  severity    String         @db.VarChar(40)
+  status      String         @default("OPEN") @db.VarChar(40)
+  description String         @db.VarChar(1000)
+  openedBy    String?        @db.Char(36)
+  resolvedBy  String?        @db.Char(36)
+  resolvedAt  DateTime?      @db.DateTime(3)
+  createdAt   DateTime       @default(now()) @db.DateTime(3)
+  updatedAt   DateTime       @updatedAt @db.DateTime(3)
+  booking     FreightBooking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  assignment  DispatchAssignment? @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, bookingId, status, severity])
+  @@index([tenantId, assignmentId, status])
+}
+
+model DispatchAssignment {
+  id                     String             @id @db.Char(36)
+  tenantId               String             @db.Char(36)
+  legId                  String             @unique @db.Char(36)
+  carrierId              String?            @db.Char(36)
+  driverId               String             @db.Char(36)
+  vehicleId              String             @db.Char(36)
+  status                 String             @default("ASSIGNED") @db.VarChar(40)
+  checkInIntervalMinutes Int                @default(240)
+  nextCheckInAt          DateTime?          @db.DateTime(3)
+  assignedBy             String             @db.Char(36)
+  assignedAt             DateTime           @default(now()) @db.DateTime(3)
+  startedAt              DateTime?          @db.DateTime(3)
+  completedAt            DateTime?          @db.DateTime(3)
+  version                Int                @default(1)
+  leg                    TransportLeg       @relation(fields: [legId], references: [id], onDelete: Restrict)
+  carrier                TransportCarrier?  @relation(fields: [carrierId], references: [id], onDelete: Restrict)
+  driver                 TransportDriver    @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  vehicle                TransportVehicle   @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  checkIns               DriverCheckIn[]
+  exceptions             FreightException[]
+
+  @@index([tenantId, status, nextCheckInAt])
+  @@index([tenantId, driverId, status])
+  @@index([tenantId, vehicleId, status])
+}
+
+model DriverCheckIn {
+  id             String             @id @db.Char(36)
+  tenantId       String             @db.Char(36)
+  assignmentId   String             @db.Char(36)
+  coordinatorId  String             @db.Char(36)
+  source         String             @db.VarChar(40)
+  outcome        String             @db.VarChar(40)
+  locationText   String             @db.VarChar(240)
+  latitude       Float?
+  longitude      Float?
+  reportedAt     DateTime           @db.DateTime(3)
+  contactedAt    DateTime           @default(now()) @db.DateTime(3)
+  estimatedArrivalAt DateTime?      @db.DateTime(3)
+  note           String?            @db.VarChar(1000)
+  exceptionCode  String?            @db.VarChar(80)
+  nextCheckInAt  DateTime?          @db.DateTime(3)
+  externalKey    String             @db.VarChar(160)
+  assignment     DispatchAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, assignmentId, externalKey])
+  @@index([tenantId, assignmentId, reportedAt])
+}
+
+model ProofOfDelivery {
+  id          String         @id @db.Char(36)
+  tenantId    String         @db.Char(36)
+  bookingId   String         @unique @db.Char(36)
+  documentId  String?        @db.Char(36)
+  recipient   String         @db.VarChar(160)
+  deliveredAt DateTime       @db.DateTime(3)
+  note        String?        @db.VarChar(1000)
+  recordedBy  String         @db.Char(36)
+  createdAt   DateTime       @default(now()) @db.DateTime(3)
+  booking     FreightBooking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, deliveredAt])
+}
+
+model BillingProfile {
+  id             String   @id @db.Char(36)
+  tenantId       String   @unique @db.Char(36)
+  legalName      String   @db.VarChar(240)
+  taxIdentifier  String?  @db.VarChar(120)
+  address        Json
+  email          String?  @db.VarChar(320)
+  defaultCurrency String  @db.Char(3)
+  defaultTermsDays Int    @default(0)
+  invoicePrefix  String   @default("INV") @db.VarChar(20)
+  createdAt      DateTime @default(now()) @db.DateTime(3)
+  updatedAt      DateTime @updatedAt @db.DateTime(3)
+}
+
+model DocumentSequence {
+  id        String   @id @db.Char(36)
+  tenantId  String   @db.Char(36)
+  kind      String   @db.VarChar(40)
+  year      Int
+  nextValue Int      @default(1)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+
+  @@unique([tenantId, kind, year])
+}
+
+model BillingInvoice {
+  id                String                   @id @db.Char(36)
+  tenantId          String                   @db.Char(36)
+  number            String                   @db.VarChar(80)
+  customerId        String?                  @db.Char(36)
+  businessAccountId String?                  @db.Char(36)
+  commerceOrderId   String?                  @db.Char(36)
+  businessOrderId   String?                  @db.Char(36)
+  logisticsClientId String?                  @db.Char(36)
+  sourceType        String                   @db.VarChar(60)
+  sourceId          String                   @db.Char(36)
+  status            String                   @default("ISSUED") @db.VarChar(40)
+  currency          String                   @db.Char(3)
+  subtotalMinor     BigInt
+  taxMinor          BigInt                   @default(0)
+  totalMinor        BigInt
+  paidMinor         BigInt                   @default(0)
+  billingSnapshot   Json
+  issuedAt          DateTime                 @default(now()) @db.DateTime(3)
+  dueAt             DateTime                 @db.DateTime(3)
+  paidAt            DateTime?                @db.DateTime(3)
+  documentObjectKey String?                  @db.VarChar(500)
+  version           Int                      @default(1)
+  createdAt         DateTime                 @default(now()) @db.DateTime(3)
+  updatedAt         DateTime                 @updatedAt @db.DateTime(3)
+  freightBooking    FreightBooking?
+  lines             InvoiceLine[]
+  schedules         InvoicePaymentSchedule[]
+  payments          PaymentAllocation[]
+  refunds           PaymentRefund[]
+  creditNotes       CreditNote[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, sourceType, sourceId])
+  @@index([tenantId, customerId, status, dueAt])
+  @@index([tenantId, businessAccountId, status, dueAt])
+}
+
+model InvoiceLine {
+  id          String         @id @db.Char(36)
+  tenantId    String         @db.Char(36)
+  invoiceId   String         @db.Char(36)
+  kind        String         @db.VarChar(60)
+  description String         @db.VarChar(500)
+  quantity    Int            @default(1)
+  unitMinor   BigInt
+  totalMinor  BigInt
+  taxMinor    BigInt         @default(0)
+  metadata    Json?
+  invoice     BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, invoiceId])
+}
+
+model InvoicePaymentSchedule {
+  id          String         @id @db.Char(36)
+  tenantId    String         @db.Char(36)
+  invoiceId   String         @db.Char(36)
+  kind        String         @db.VarChar(40)
+  amountMinor BigInt
+  paidMinor   BigInt         @default(0)
+  dueAt       DateTime       @db.DateTime(3)
+  status      String         @default("DUE") @db.VarChar(40)
+  sequence    Int
+  invoice     BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sessions    PaymentSession[]
+  allocations PaymentAllocation[]
+
+  @@unique([tenantId, invoiceId, sequence])
+  @@index([tenantId, status, dueAt])
+}
+
+model PaymentSession {
+  id                String                 @id @db.Char(36)
+  tenantId          String                 @db.Char(36)
+  scheduleId        String                 @db.Char(36)
+  provider          String                 @db.VarChar(40)
+  providerReference String                 @db.VarChar(240)
+  status            String                 @default("PENDING") @db.VarChar(40)
+  amountMinor       BigInt
+  currency          String                 @db.Char(3)
+  checkoutUrl       String                 @db.VarChar(1000)
+  idempotencyKey    String                 @db.VarChar(160)
+  expiresAt         DateTime               @db.DateTime(3)
+  completedAt       DateTime?              @db.DateTime(3)
+  createdAt         DateTime               @default(now()) @db.DateTime(3)
+  updatedAt         DateTime               @updatedAt @db.DateTime(3)
+  schedule          InvoicePaymentSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  events            PaymentEvent[]
+  allocations       PaymentAllocation[]
+  refunds           PaymentRefund[]
+
+  @@unique([provider, providerReference])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, expiresAt])
+}
+
+model PaymentEvent {
+  id                String         @id @db.Char(36)
+  tenantId          String         @db.Char(36)
+  sessionId         String?        @db.Char(36)
+  provider          String         @db.VarChar(40)
+  providerEventId   String         @db.VarChar(240)
+  eventType         String         @db.VarChar(120)
+  payloadHash       String         @db.Char(64)
+  payload           Json
+  status            String         @default("RECEIVED") @db.VarChar(40)
+  error             String?        @db.VarChar(1000)
+  receivedAt        DateTime       @default(now()) @db.DateTime(3)
+  processedAt       DateTime?      @db.DateTime(3)
+  session           PaymentSession? @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerEventId])
+  @@index([tenantId, status, receivedAt])
+}
+
+model PaymentAllocation {
+  id          String                 @id @db.Char(36)
+  tenantId    String                 @db.Char(36)
+  invoiceId   String                 @db.Char(36)
+  scheduleId  String                 @db.Char(36)
+  sessionId   String                 @db.Char(36)
+  amountMinor BigInt
+  currency    String                 @db.Char(3)
+  allocatedAt DateTime               @default(now()) @db.DateTime(3)
+  invoice     BillingInvoice         @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  schedule    InvoicePaymentSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  session     PaymentSession         @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, sessionId])
+  @@index([tenantId, invoiceId, allocatedAt])
+}
+
+model PaymentRefund {
+  id                String         @id @db.Char(36)
+  tenantId          String         @db.Char(36)
+  invoiceId         String         @db.Char(36)
+  sessionId         String         @db.Char(36)
+  providerReference String?        @db.VarChar(240)
+  amountMinor       BigInt
+  reason            String         @db.VarChar(500)
+  status            String         @default("PENDING") @db.VarChar(40)
+  requestedBy       String         @db.Char(36)
+  completedAt       DateTime?      @db.DateTime(3)
+  createdAt         DateTime       @default(now()) @db.DateTime(3)
+  invoice           BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  session           PaymentSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, invoiceId, status])
+}
+
+model CreditNote {
+  id          String         @id @db.Char(36)
+  tenantId    String         @db.Char(36)
+  invoiceId   String         @db.Char(36)
+  number      String         @db.VarChar(80)
+  amountMinor BigInt
+  reason      String         @db.VarChar(500)
+  status      String         @default("ISSUED") @db.VarChar(40)
+  issuedBy    String         @db.Char(36)
+  issuedAt    DateTime       @default(now()) @db.DateTime(3)
+  invoice     BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, number])
+  @@index([tenantId, invoiceId])
+}

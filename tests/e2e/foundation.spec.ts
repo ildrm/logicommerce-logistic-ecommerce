@@ -77,7 +77,9 @@ test('operations surface exposes product workflows without roadmap metadata', as
   await expect(page.getByText(/phase \d|implementation evidence|current release/iu)).toHaveCount(0);
 });
 
-test('dashboard summarizes live tenant processes and remains accessible', async ({ page }, testInfo) => {
+test('dashboard summarizes live tenant processes and remains accessible', async ({
+  page,
+}, testInfo) => {
   const browserErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') browserErrors.push(message.text());
@@ -93,7 +95,17 @@ test('dashboard summarizes live tenant processes and remains accessible', async 
   await expect(page.getByRole('heading', { name: 'Exceptions requiring attention' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Process health' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Cross-domain activity' })).toBeVisible();
-  for (const domain of ['Identity', 'Catalog', 'Commerce', 'C2C', 'B2B', 'Shop APIs', '3PL / 4PL', 'Optimization', 'Reliability']) {
+  for (const domain of [
+    'Identity',
+    'Catalog',
+    'Commerce',
+    'C2C',
+    'B2B',
+    'Shop APIs',
+    '3PL / 4PL',
+    'Optimization',
+    'Reliability',
+  ]) {
     await expect(page.getByText(domain, { exact: true }).first()).toBeVisible();
   }
   await expect(page.getByRole('heading', { name: 'Inventory position' })).toBeVisible();
@@ -103,8 +115,38 @@ test('dashboard summarizes live tenant processes and remains accessible', async 
 
   await page.getByRole('button', { name: '7 days' }).click();
   await expect(page).toHaveURL(/days=7/u);
-  await expect(page.getByRole('button', { name: '7 days' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '7 days' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByRole('button', { name: 'Refresh' })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('dashboard.png'), fullPage: true });
   expect(browserErrors).toEqual([]);
+});
+
+test('freight customer and operations workspaces are responsive and actionable', async ({
+  page,
+}) => {
+  await signIn(page);
+
+  await page.goto('/freight');
+  await expect(
+    page.getByRole('heading', { name: 'Move large cargo with one accountable booking.' }),
+  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New transportation request' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Requests and quotes' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Bookings and movement' })).toBeVisible();
+  await expect(page.getByLabel('Pickup city')).toBeEditable();
+
+  await page.goto('/operations/freight');
+  await expect(page.getByRole('heading', { name: 'Freight operations' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Request review queue' })).toBeVisible();
+  await page.getByRole('link', { name: 'Dispatch' }).click();
+  await expect(page.getByRole('heading', { name: 'Driver coordination' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Active driver contacts' })).toBeVisible();
+  await page.getByRole('link', { name: 'Billing' }).click();
+  await expect(page.getByRole('heading', { name: 'Billing operations' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Canonical invoices' })).toBeVisible();
+  await expect(page.getByText(/phase \d|implementation evidence|current release/iu)).toHaveCount(0);
 });

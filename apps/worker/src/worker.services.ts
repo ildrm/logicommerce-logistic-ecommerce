@@ -169,6 +169,81 @@ export class ReservationExpirySweeper implements OnModuleInit, OnApplicationShut
 }
 
 @Injectable()
+export class TransportOperationsSweeper implements OnModuleInit, OnApplicationShutdown {
+  private timer: NodeJS.Timeout | undefined;
+
+  constructor(@Inject(DATABASE) private readonly database: DatabaseClient) {}
+
+  onModuleInit() {
+    this.timer = setInterval(() => {
+      void this.sweep().catch((error: unknown) => {
+        logger.error({ err: error }, 'Transport operations sweep failed; retrying');
+      });
+    }, 60_000);
+    void this.sweep();
+  }
+
+  onApplicationShutdown() {
+    if (this.timer) clearInterval(this.timer);
+  }
+
+  private async sweep() {
+    const now = new Date();
+    const overdue = await this.database.dispatchAssignment.findMany({
+      where: { status: 'IN_TRANSIT', nextCheckInAt: { lte: now } },
+      include: { leg: true },
+      take: 100,
+    });
+    for (const assignment of overdue) {
+      await this.database.$transaction(async (tx) => {
+        const open = await tx.freightException.findFirst({
+          where: {
+            tenantId: assignment.tenantId,
+            assignmentId: assignment.id,
+            code: 'CHECK_IN_OVERDUE',
+            status: 'OPEN',
+          },
+        });
+        if (open) return;
+        await tx.freightException.create({
+          data: {
+            id: randomUUID(),
+            tenantId: assignment.tenantId,
+            bookingId: assignment.leg.bookingId,
+            assignmentId: assignment.id,
+            code: 'CHECK_IN_OVERDUE',
+            severity: 'HIGH',
+            description: `Driver check-in overdue since ${assignment.nextCheckInAt?.toISOString() ?? 'unknown'}`,
+          },
+        });
+        await tx.freightBooking.updateMany({
+          where: {
+            id: assignment.leg.bookingId,
+            tenantId: assignment.tenantId,
+            status: 'IN_TRANSIT',
+          },
+          data: { status: 'EXCEPTION', version: { increment: 1 } },
+        });
+      });
+    }
+    await this.database.paymentSession.updateMany({
+      where: { status: 'PENDING', expiresAt: { lte: now } },
+      data: { status: 'EXPIRED' },
+    });
+    await this.database.billingInvoice.updateMany({
+      where: {
+        status: { in: ['ISSUED', 'PARTIALLY_PAID'] },
+        dueAt: { lt: now },
+      },
+      data: { status: 'OVERDUE', version: { increment: 1 } },
+    });
+    if (overdue.length > 0) {
+      logger.warn({ count: overdue.length }, 'Overdue transport check-ins opened as exceptions');
+    }
+  }
+}
+
+@Injectable()
 export class WorkerHealth implements OnModuleInit, OnApplicationShutdown {
   async onModuleInit() {
     await writeFile('/tmp/logicommerce-worker-healthy', new Date().toISOString(), { mode: 0o600 });

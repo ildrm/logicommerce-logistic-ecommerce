@@ -232,10 +232,16 @@ export default function AccountPage() {
         <div>
           <h1>{user ? 'Identity & access' : 'Secure sign in.'}</h1>
           <p className="page-subtitle">
-            {user ? `Signed in as ${user.displayName}. Manage authentication, devices, users, and authorization.` : 'Access your tenant workspace and protected operational tools.'}
+            {user
+              ? `Signed in as ${user.displayName}. Manage authentication, devices, users, and authorization.`
+              : 'Access your tenant workspace and protected operational tools.'}
           </p>
         </div>
-        {user ? <a className="button button--primary" href="/dashboard">Open dashboard</a> : null}
+        {user ? (
+          <a className="button button--primary" href="/dashboard">
+            Open dashboard
+          </a>
+        ) : null}
       </div>
       {message ? (
         <p className="notice" role="status">

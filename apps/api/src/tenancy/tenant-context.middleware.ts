@@ -46,7 +46,8 @@ export class TenantContextMiddleware implements NestMiddleware {
   private isInfrastructurePath(url: string | undefined): boolean {
     return (
       /^\/(?:api\/)?(?:v\d+\/)?health(?:\/|$)/u.test(url ?? '') ||
-      url?.startsWith('/api/docs') === true
+      url?.startsWith('/api/docs') === true ||
+      /^\/api\/v\d+\/payments\/webhooks(?:\/|$)/u.test(url ?? '')
     );
   }
 }

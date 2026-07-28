@@ -4,10 +4,10 @@ LogiCommerce is a multi-tenant commerce and logistics platform for C2C, B2C,
 B2B, dropshipping, and 1PL–5PL operating models. The repository starts as a
 modular monolith with separately runnable web, API, and worker processes.
 
-> **Current state:** Phases 0–7 are tested. This is a working
-> identity-secured commerce and network-operations core, not a completed
-> returns, finance, 3PL–5PL, or hardening program. New
-> contributors should begin with the
+> **Current state:** Phases 0–12 have repository-level automated evidence.
+> This includes global multimodal freight, canonical invoicing, hosted-payment
+> adapters, and manual driver coordination. Production provider activation and
+> external release evidence remain deployment work. New contributors should begin with the
 > [continuation guide](docs/development/continuation-guide.md).
 
 ## Quick start
@@ -27,6 +27,10 @@ Local endpoints:
 | Swagger                      | http://localhost:8080/api/docs |
 | Mailpit                      | http://localhost:8025          |
 | MinIO console                | http://localhost:9001          |
+
+Primary product workspaces are `/dashboard`, `/freight`, `/storefront`,
+`/account`, `/operations`, `/operations/freight`, `/operations/dispatch`, and
+`/operations/billing`.
 
 The reverse proxy is the normal application entry point. MySQL, Redis, and
 MinIO API ports are exposed only in the development override.
@@ -54,6 +58,7 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm test:network:live
+pnpm test:phase12:live
 ```
 
 See the [documentation map](docs/README.md),
@@ -63,10 +68,11 @@ See the [documentation map](docs/README.md),
 
 ## Continue implementation
 
-Phases 0–11 have repository-level automated evidence. Preserve the tested
+Phases 0–12 have repository-level automated evidence. Preserve the tested
 tenancy, ledger, idempotency, approval, and webhook invariants while selecting
-production providers and obtaining authorized CI security/SBOM, measured
-coverage, penetration-test, and provider restore evidence.
+regional production providers and obtaining Stripe/Coinbase sandbox,
+authorized CI security/SBOM, measured coverage, penetration-test, and provider
+restore evidence.
 
 ## Repository layout
 
@@ -79,9 +85,11 @@ coverage, penetration-test, and provider restore evidence.
 - `tests` — cross-application and performance test foundations.
 - `mockups/control-tower` — retained visual design reference.
 
-External payment, tax, identity-verification, and carrier providers are not
-presented as production integrations. Development uses deterministic adapter
-boundaries until credentials and contracts are selected.
+Stripe Checkout and Coinbase Business Checkout adapters are implemented but
+are inactive without deployment secrets and sandbox certification. The
+synchronous mock is local/test-only and production startup rejects it. Tax,
+identity-verification, and carrier integrations remain adapter boundaries until
+credentials and contracts are selected.
 
 The [verification record](docs/testing/verification-record.md) contains the
 commands and live checks that passed at the foundation handoff. Update it only

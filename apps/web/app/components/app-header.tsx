@@ -1,11 +1,12 @@
 type AppHeaderProps = {
-  active?: 'dashboard' | 'operations' | 'storefront' | 'platform' | 'account';
+  active?: 'dashboard' | 'operations' | 'freight' | 'storefront' | 'platform' | 'account';
   compact?: boolean;
 };
 
 const links = [
   ['dashboard', '/dashboard', 'Dashboard'],
   ['operations', '/operations', 'Operations'],
+  ['freight', '/freight', 'Freight'],
   ['storefront', '/storefront', 'Storefront'],
   ['platform', '/platform', 'Platform'],
   ['account', '/account', 'Account'],
