@@ -4,6 +4,15 @@ packages:
 
 injectWorkspacePackages: true
 
+overrides:
+  brace-expansion@5.0.7: 5.0.8
+  find-my-way@9.6.0: 9.7.0
+  js-yaml@4.1.1: 4.3.0
+  lodash@4.17.21: 4.18.1
+  path-to-regexp@8.3.0: 8.4.2
+  postcss@8.4.31: 8.5.20
+  sharp@0.34.5: 0.35.3
+
 allowBuilds:
   '@nestjs/core': true
   '@prisma/client': true
