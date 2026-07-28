@@ -1,8 +1,9 @@
 # Platform acceptance scenarios
 
-These scenarios are the final product-level acceptance journeys preserved from
-the platform blueprint. They are not currently passing and must not be marked
-complete until automated evidence exists.
+These scenarios are the product-level acceptance journeys preserved from the
+platform blueprint. Focused repository-level journeys for Phases 1–12 pass as
+recorded in the verification record. A scenario is production-certified only
+after every provider-dependent step in that deployment has evidence.
 
 ## Scenario A — B2C dropshipping
 
@@ -112,6 +113,57 @@ complete until automated evidence exists.
 5. A refund is issued.
 6. Settlement is recalculated through compensating ledger entries.
 7. The journal remains balanced.
+
+## Scenario J — Global freight
+
+1. An authenticated individual or business submits multimodal freight demand.
+2. The system produces a non-binding rate-card estimate or marks it
+   `NEEDS_REVIEW`.
+3. Operations publishes a binding immutable quote revision.
+4. The customer accepts one valid quote and receives a canonical invoice.
+5. The required payment schedule is satisfied through a signed provider event
+   or approved business terms.
+6. Operations plans ordered road, sea, air, or rail legs.
+7. A road leg uses an internal or subcontracted assignment.
+8. A driver coordinator records manual check-ins and resolves any stale
+   check-in exception.
+9. Operator/provider milestones form the chronological booking timeline.
+10. Proof of delivery is recorded before booking completion.
+11. Tenant and permission denial do not reveal cross-tenant existence.
+
+The local mock-payment request-to-POD version of this scenario passes. Stripe
+and Coinbase sandbox certification remains deployment evidence. The timeline
+does not claim continuous GPS.
+
+## Scenario K — International consolidation, insurance, customs, and postal exchange
+
+1. Operations loads governed origin/destination locations and hubs.
+2. A customer submits insured international cargo with declared value.
+3. Operations issues a binding freight quote and a product-specific insurance
+   quote with clause, exclusion, deductible, territory, and mode snapshots.
+4. Freight acceptance creates the booking invoice; insurance acceptance
+   creates a separate premium invoice.
+5. Required payment activates freight and cargo-insurance coverage.
+6. Operations creates parties, a consignment, a versioned multimodal transport
+   document, and a customs filing.
+7. Cargo is allocated to a scanned handling unit and received at the origin hub.
+8. The eligible consignment joins a capacity-controlled consolidation before
+   cutoff and the handling unit is loaded.
+9. The consolidation receives a shared linehaul allocation and can proceed
+   through arrival, deconsolidation, and onward distribution.
+10. A loss within active coverage creates an owned, auditable claim and the
+    claims operator assesses it under least privilege.
+11. A postal customer creates an item with required customs data and a valid
+    S10 identifier.
+12. Postal operations load the item into a compatible receptacle and dispatch,
+    hand it over, and ingest idempotent standard events.
+13. Dashboard signals expose claims, handling/consolidation failures, customs
+    holds, postal exceptions, and late handovers.
+14. Cross-tenant and insufficient-permission access is denied.
+
+The local repository journey is implemented in
+`tests/e2e/phase13-live.mjs`. Provider/dataset conformance and licensing remain
+deployment evidence.
 
 ## Evidence requirements
 

@@ -1,7 +1,26 @@
 # Changelog
 
+## 2026-07-28 — Phase 13 international logistics structure
+
+- Added the transportation/logistics/postal/product expert audit and Phase 13
+  PRD.
+- Added governed international locations, parties, consignments, transport
+  document revisions, and customs filing workflows.
+- Added cargo-insurance provider/product versions, calculated quotes,
+  canonical premium invoices, payment-gated policy activation, certificates,
+  owned claims, and claims operations.
+- Added hubs, nested handling units, SSCC/VGM controls, custody events,
+  consolidation/deconsolidation, capacity/cutoff checks, and shared linehaul.
+- Added postal operator/product, S10 items, receptacles, dispatches, postal
+  consignments, and idempotent standard events.
+- Added least-privilege international roles/permissions, customer and
+  operations workspaces, dashboard signals, worker monitoring, migrations,
+  seed fixtures, shared contracts, unit rules, and a Phase 13 live journey.
+
 All notable project changes are recorded here. The project follows Keep a
 Changelog structure and will adopt semantic versioning when releases begin.
+Entries under a released version describe the state at that release; later
+work is recorded under `Unreleased` rather than rewriting historical limits.
 
 ## Unreleased
 
@@ -70,6 +89,15 @@ Changelog structure and will adopt semantic versioning when releases begin.
 - Responsive Phase 4–11 operations surface, runbooks, evidence-backed hardening
   portfolio, bounded request metrics, hardened ingress, load specifications,
   CI security scanning, and CycloneDX SBOM generation.
+- Phase 12 global multimodal freight requests, rate-card estimates, immutable
+  quote revisions, bookings, ordered transport legs, operational milestones,
+  internal/subcontracted dispatch, manual driver check-ins, overdue-check-in
+  exceptions, and proof of delivery.
+- Canonical invoicing and payment schedules for commerce and freight, hosted
+  Stripe Checkout and Coinbase Business Checkout adapters, signed idempotent
+  payment webhooks, allocations, refunds, credit notes, and balanced journals.
+- Customer freight and operator freight, dispatch, billing, and analytical
+  dashboard workspaces, including a chronological milestone timeline.
 
 ### Validated
 
@@ -104,11 +132,20 @@ Changelog structure and will adopt semantic versioning when releases begin.
   approval, execution, measured outcome, and rollback.
 - Phase 11 repository, browser, live, and 25-VU load gates; 48,685 iterations
   completed with 0% failures and p95 72.24 ms.
+- Complete Phase 12 local request-to-proof-of-delivery journey, tenant and
+  permission denial, payment signature/replay tests, migration/seed repeat,
+  production builds, prior-phase regressions, and 12 desktop/mobile browser
+  scenarios.
 
 ### Known limitations
 
 - Concrete production email and OIDC/social providers are not bundled; the
   selected deployment must supply those adapters and secrets.
+- Stripe and Coinbase adapters require deployment-specific sandbox
+  certification. Provider-session polling, production invoice-email delivery,
+  and an active malware scanner remain integration work.
+- Freight tracking is an ordered operational milestone timeline. It does not
+  claim continuous GPS tracking or a unified quote/payment/travel audit feed.
 - Authorized CI scan/SBOM output, measured domain-critical coverage, external
   penetration testing, and a production-provider restore exercise remain
   release evidence.

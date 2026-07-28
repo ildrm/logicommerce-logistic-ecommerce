@@ -1599,14 +1599,18 @@ h2 {
 
 @media (max-width: 1180px) {
   .app-header {
-    grid-template-columns: minmax(max-content, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .app-nav {
     grid-row: 2;
     grid-column: 1 / -1;
     order: 3;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     overflow-x: auto;
+    overscroll-behavior-inline: contain;
     border-top: 1px solid var(--lc-color-border);
   }
 

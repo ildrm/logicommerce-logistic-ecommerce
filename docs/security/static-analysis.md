@@ -10,6 +10,7 @@ review found all six to be false positives:
 - The application finding matched the `%s` placeholder in the Next.js metadata
   title template. It is not a SQL statement or query input.
 
-The scanner's estimated 11% test coverage is directional rather than measured;
-coverage expansion remains a valid Phase 11 requirement. Domain-critical phase
-exit criteria require measured coverage of at least 80%.
+The scanner's estimated 11% test coverage was directional rather than measured.
+That historical scan is not current coverage evidence. Domain-critical release
+criteria still require a generated, archived report demonstrating at least 80%
+coverage; repository-level phase tests do not substitute for it.

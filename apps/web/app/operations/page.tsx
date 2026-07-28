@@ -26,6 +26,30 @@ const domains = [
     href: '/operations/billing',
   },
   {
+    key: 'consolidation',
+    title: 'Hubs, consolidation & linehaul',
+    summary:
+      'Build traceable handling units, consolidate compatible consignments, share capacity, and deconsolidate for distribution.',
+    stages: ['Receive', 'Build', 'Consolidate', 'Seal', 'Linehaul', 'Break bulk', 'Distribute'],
+    href: '/operations/network',
+  },
+  {
+    key: 'insurance',
+    title: 'Cargo insurance & claims',
+    summary:
+      'Version international coverage products, bind policy evidence, receive losses, assess claims, and record settlement.',
+    stages: ['Declare', 'Quote', 'Bind', 'Notify', 'Assess', 'Settle', 'Close'],
+    href: '/operations/insurance',
+  },
+  {
+    key: 'postal',
+    title: 'International postal exchange',
+    summary:
+      'Operate item, receptacle, dispatch, and consignment levels with standard event evidence.',
+    stages: ['Accept', 'Receptacle', 'Dispatch', 'Handover', 'Exchange', 'Customs', 'Deliver'],
+    href: '/operations/postal',
+  },
+  {
     key: 'fulfillment',
     title: 'Fulfillment & delivery',
     summary: 'Inbound receiving, warehouse execution, carrier handoff, and end-to-end tracking.',

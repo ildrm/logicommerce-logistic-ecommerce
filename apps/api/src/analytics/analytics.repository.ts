@@ -80,6 +80,12 @@ export class AnalyticsRepository {
       staleAssignments,
       canonicalInvoices,
       paymentSessions,
+      insuranceClaims,
+      handlingUnits,
+      consolidationPlans,
+      postalItems,
+      postalDispatches,
+      customsFilings,
     ] = await Promise.all([
       this.db.order.findMany({
         where: { tenantId, createdAt: { gte: start } },
@@ -211,6 +217,36 @@ export class AnalyticsRepository {
         where: { tenantId },
         _count: { _all: true },
       }),
+      this.db.cargoInsuranceClaim.findMany({
+        where: { tenantId },
+        select: { status: true },
+        take: 5_000,
+      }),
+      this.db.handlingUnit.findMany({
+        where: { tenantId },
+        select: { status: true },
+        take: 5_000,
+      }),
+      this.db.consolidationPlan.findMany({
+        where: { tenantId },
+        select: { status: true, cutoffAt: true },
+        take: 5_000,
+      }),
+      this.db.postalItem.findMany({
+        where: { tenantId },
+        select: { status: true },
+        take: 5_000,
+      }),
+      this.db.postalDispatch.findMany({
+        where: { tenantId },
+        select: { status: true, scheduledDepartureAt: true },
+        take: 5_000,
+      }),
+      this.db.customsFiling.findMany({
+        where: { tenantId },
+        select: { status: true },
+        take: 5_000,
+      }),
     ]);
 
     const overdueFulfillment = fulfillments.filter(
@@ -308,6 +344,27 @@ export class AnalyticsRepository {
         transportLegs.filter((leg) => leg.mode === mode).length,
       ]),
     );
+    const openInsuranceClaims = insuranceClaims.filter(
+      ({ status }) => !['REJECTED', 'PAID', 'CLOSED', 'WITHDRAWN'].includes(status),
+    ).length;
+    const handlingExceptions = handlingUnits.filter(({ status }) => status === 'EXCEPTION').length;
+    const activeConsolidations = consolidationPlans.filter(
+      ({ status }) => !['COMPLETED', 'CANCELLED'].includes(status),
+    ).length;
+    const consolidationExceptions = consolidationPlans.filter(
+      ({ status, cutoffAt }) =>
+        status === 'EXCEPTION' || (['DRAFT', 'OPEN'].includes(status) && cutoffAt <= now),
+    ).length;
+    const postalExceptions = postalItems.filter(({ status }) =>
+      ['CUSTOMS_HELD', 'LOST', 'DAMAGED'].includes(status),
+    ).length;
+    const delayedPostalDispatches = postalDispatches.filter(
+      ({ status, scheduledDepartureAt }) =>
+        scheduledDepartureAt !== null &&
+        scheduledDepartureAt < now &&
+        !['HANDED_OVER', 'RECEIVED', 'CLOSED'].includes(status),
+    ).length;
+    const customsHolds = customsFilings.filter(({ status }) => status === 'HELD').length;
 
     const signals = (
       [
@@ -430,6 +487,54 @@ export class AnalyticsRepository {
           count: paymentBlocks,
           owner: 'Payments team',
           href: '/operations/billing',
+        },
+        {
+          severity: 'high',
+          process: 'Cargo insurance',
+          issue: 'Claims awaiting assessment or settlement',
+          count: openInsuranceClaims,
+          owner: 'Insurance claims',
+          href: '/operations/insurance',
+        },
+        {
+          severity: 'high',
+          process: 'Hub handling',
+          issue: 'Handling units in exception',
+          count: handlingExceptions,
+          owner: 'Hub operations',
+          href: '/operations/network',
+        },
+        {
+          severity: 'high',
+          process: 'Consolidation',
+          issue: 'Consolidation plans in exception',
+          count: consolidationExceptions,
+          owner: 'Network planning',
+          href: '/operations/network',
+        },
+        {
+          severity: 'high',
+          process: 'Postal',
+          issue: 'Postal items held, lost, or damaged',
+          count: postalExceptions,
+          owner: 'Postal operations',
+          href: '/operations/postal',
+        },
+        {
+          severity: 'medium',
+          process: 'Postal',
+          issue: 'Dispatch handovers past schedule',
+          count: delayedPostalDispatches,
+          owner: 'Postal transport',
+          href: '/operations/postal',
+        },
+        {
+          severity: 'high',
+          process: 'Customs',
+          issue: 'Customs filings on hold',
+          count: customsHolds,
+          owner: 'Trade compliance',
+          href: '/operations/network',
         },
       ] satisfies ExceptionSignal[]
     ).filter((signal) => signal.count > 0);
@@ -584,6 +689,37 @@ export class AnalyticsRepository {
               ).length,
           ),
         },
+        {
+          key: 'handling',
+          label: 'Hub handling',
+          total: handlingUnits.length,
+          exceptions: handlingExceptions,
+          healthyPercent: percentage(handlingUnits.length, handlingExceptions),
+        },
+        {
+          key: 'consolidation',
+          label: 'Consolidation',
+          total: consolidationPlans.length,
+          exceptions: consolidationExceptions,
+          healthyPercent: percentage(consolidationPlans.length, consolidationExceptions),
+        },
+        {
+          key: 'insurance',
+          label: 'Cargo insurance',
+          total: insuranceClaims.length,
+          exceptions: openInsuranceClaims,
+          healthyPercent: percentage(insuranceClaims.length, openInsuranceClaims),
+        },
+        {
+          key: 'postal',
+          label: 'Postal exchange',
+          total: postalItems.length + postalDispatches.length,
+          exceptions: postalExceptions + delayedPostalDispatches,
+          healthyPercent: percentage(
+            postalItems.length + postalDispatches.length,
+            postalExceptions + delayedPostalDispatches,
+          ),
+        },
       ],
       inventory: {
         states: inventoryByState,
@@ -620,6 +756,21 @@ export class AnalyticsRepository {
         paymentBlocks,
         bookingsByStatus,
         bookingsByMode,
+      },
+      international: {
+        insuranceClaims: insuranceClaims.length,
+        openInsuranceClaims,
+        handlingUnits: handlingUnits.length,
+        handlingExceptions,
+        consolidationPlans: consolidationPlans.length,
+        activeConsolidations,
+        consolidationExceptions,
+        postalItems: postalItems.length,
+        postalDispatches: postalDispatches.length,
+        postalExceptions,
+        delayedPostalDispatches,
+        customsFilings: customsFilings.length,
+        customsHolds,
       },
       domainActivity: [
         {
@@ -733,6 +884,34 @@ export class AnalyticsRepository {
           value: paymentBlocks,
           context: 'failed sessions',
           href: '/operations/billing',
+        },
+        {
+          key: 'handling',
+          label: 'Handling units',
+          value: handlingUnits.length,
+          context: 'traceable logistics units',
+          href: '/operations/network',
+        },
+        {
+          key: 'consolidation',
+          label: 'Consolidation',
+          value: activeConsolidations,
+          context: 'active plans',
+          href: '/operations/network',
+        },
+        {
+          key: 'insurance',
+          label: 'Cargo insurance',
+          value: openInsuranceClaims,
+          context: 'open claims',
+          href: '/operations/insurance',
+        },
+        {
+          key: 'postal',
+          label: 'Postal exchange',
+          value: postalItems.length,
+          context: 'international items',
+          href: '/operations/postal',
         },
       ],
       slos: slos.map((slo) => {

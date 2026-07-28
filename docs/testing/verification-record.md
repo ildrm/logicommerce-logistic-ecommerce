@@ -3,6 +3,24 @@
 This file records commands that actually ran. It is not a substitute for CI and
 must be updated with new evidence when behavior changes.
 
+## Documentation and freight-timeline audit — 2026-07-28
+
+- Reviewed all 66 Markdown files present before the audit record was added.
+  Current guides were reconciled with Phase 12 controllers, repositories,
+  Prisma models, worker behavior, seed permissions, and customer/operator
+  routes. Historical ADR, hardening, changelog-release, and dated verification
+  evidence was preserved as historical context.
+- Traced booking responses and confirmed ordered legs, milestones ordered by
+  `occurredAt`, manual assignment check-ins, exceptions, and proof of delivery.
+  Traced the `/freight` page and confirmed that it renders booking milestones as
+  a semantic chronological list.
+- `./node_modules/.bin/prettier --check` passed for all project Markdown files.
+- A local relative-link validator checked 67 Markdown files after adding the
+  audit and timeline documents; every relative target resolved.
+- `git diff --check` passed.
+- No application runtime tests were rerun because this change modifies
+  documentation only.
+
 ## Phase 8 through 11 completion — 2026-07-23
 
 ### Environment
@@ -498,6 +516,52 @@ measured coverage report, and broad domain coverage remains Phase 11 work.
 - Stripe and Coinbase live/sandbox results are intentionally not claimed:
   repository secrets remain unset and external provider certification is a
   release prerequisite.
+
+## 2026-07-28 Phase 13 international logistics verification
+
+- Applied append-only migrations
+  `202607280002_phase13_international_logistics` and
+  `202607280003_phase13_insurance_versions`; Prisma format, validation, client
+  generation, and the idempotent seed passed.
+- Built production migration, API, worker, and web images with Node 24. The web
+  build prerendered `/postal`, `/operations/network`,
+  `/operations/insurance`, `/operations/postal`, `/freight`, and `/dashboard`.
+  API, web, worker, reverse proxy, MySQL, Redis, MinIO, and Mailpit were
+  observed healthy after activation.
+- Formatting passed across the repository. The monorepo unit pipeline passed
+  18/18 tasks; the API passed 9 files and 26 assertions, including four
+  international identifier, capacity, and state-transition rules.
+- `node tests/e2e/phase13-live.mjs` passed against
+  `http://localhost:8080`. It covered international locations, permission and
+  tenant denial, an insured freight request, premium invoice/payment and
+  policy activation, claim submission and operator transition, transport
+  parties/consignment/document/customs records, handling-unit content and
+  idempotent custody events, consolidation and capacity rejection, VGM-gated
+  loading, shared linehaul allocation, postal item/receptacle/dispatch/
+  consignment handover, idempotent postal events, and analytical signals.
+- Authentication, commerce, Phase 4–7, Phase 8–11, and Phase 12 live
+  regressions passed. The authentication suite was isolated because its final
+  scenario intentionally exhausts the Redis-backed auth rate limit.
+- Playwright passed 12/12 Chromium and mobile scenarios. The first browser run
+  exposed mobile navigation content expanding beyond its scroll container
+  after the Postal link was added; the grid track and horizontal overflow were
+  contained and the mobile Platform navigation then passed. A second run
+  exposed partial account hydration: navigation could abort auxiliary identity
+  requests after the UI had already exposed the authenticated state, clearing
+  a valid token. Account data now commits atomically after all authorized
+  hydration requests succeed, and the final 12/12 run passed.
+- A legacy Phase 10 regression exposed unordered Prisma relation results. The
+  optimization API now orders recommendations by rank for both new and
+  idempotently replayed runs; the Phase 8–11 journey then passed.
+- Host Node 26 is outside the repository's supported `>=24 <25` engine range.
+  Static/package commands were therefore executed in the pinned Node 24
+  container. Parallel static runs exceeded local Docker memory and were
+  repeated with controlled concurrency; resource-killed attempts are not
+  counted as passing evidence.
+- No live insurer, customs, UPU/postal, carrier, GS1, sanctions,
+  dangerous-goods, Stripe, or Coinbase certification is claimed. These require
+  external credentials, agreements, licensed data, and jurisdiction-specific
+  evidence.
 
 ## How to add a new verification entry
 

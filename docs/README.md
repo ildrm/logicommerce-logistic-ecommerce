@@ -7,10 +7,10 @@ has just cloned the repository should read the documents in this order:
    state, setup, guardrails, and the next implementation slice.
 2. [Implementation status](../IMPLEMENTATION_STATUS.md) — authoritative phase
    status; this is the source of truth for what may be called complete.
-3. [Phase roadmap](product/phase-roadmap.md) — requirements and exit criteria
-   for Phases 1–11.
-4. [Acceptance scenarios](product/acceptance-scenarios.md) — final journeys
-   A–I that must eventually pass.
+3. [Phase roadmap](product/phase-roadmap.md) — implemented requirements and
+   exit criteria for Phases 1–13.
+4. [Acceptance scenarios](product/acceptance-scenarios.md) — product journeys
+   A–J and their current evidence boundary.
 5. [Verification record](testing/verification-record.md) — commands and live
    scenarios that passed on the last handoff.
 6. [Open decisions](open-decisions.md) — business or production choices that
@@ -37,6 +37,10 @@ has just cloned the repository should read the documents in this order:
 - [C2C boundary](business/c2c.md)
 - [B2B boundary](business/b2b.md)
 - [1PL–5PL capability map](logistics/1pl-5pl-capability-map.md)
+- [Freight journey timeline](logistics/freight-journey-timeline.md)
+- [International logistics system audit](product/international-logistics-system-audit.md)
+- [Phase 13 PRD](product/phase13-international-logistics-prd.md)
+- [International standards and object map](logistics/international-standards-map.md)
 - [Panel navigation](ux/panel-navigation.md)
 - [Design system](ux/design-system.md)
 
@@ -54,7 +58,10 @@ has just cloned the repository should read the documents in this order:
 - [Production readiness controls](operations/production-readiness.md)
 - [Backup and restore runbook](operations/backup-restore-runbook.md)
 - [Incident, rollout, and key-rotation runbook](operations/incident-rollout-runbook.md)
+- [Freight, payment, and driver-coordination runbook](operations/phase12-freight-payments-runbook.md)
+- [International logistics operations runbook](operations/international-logistics-runbook.md)
 - [Verification record](testing/verification-record.md)
+- [Documentation audit](testing/documentation-audit-2026-07-28.md)
 
 ## Documentation rules
 

@@ -10,13 +10,16 @@ custody, customs filing, or country-specific statutory e-invoicing.
 ## Activation sequence
 
 1. Deploy migration `20260728055751_phase12_transport_billing` and run the seed
-   twice. Confirm the `driver-coordinator` role has exactly the five transport
+   twice. Confirm the `driver-coordinator` role has exactly the four transport
    permissions documented in the permission matrix.
 2. Configure tenant billing identity, invoice currency, legal address, tax
-   identifier, payment terms, credit limits, and the tenant freight feature
-   flag.
-3. Configure S3-compatible storage and verify quarantine, checksum, content
-   type, maximum-size, signed upload, and signed download behavior.
+   identifier, payment terms, and credit limits. Tenant-level freight feature
+   flags are planned but are not implemented; restrict rollout through
+   deployment and authorization controls.
+3. Configure S3-compatible storage and verify checksum, content type,
+   maximum-size, signed upload, quarantine metadata, and signed download
+   behavior. Do not treat quarantine status as an active malware scanner; add
+   and certify a scanner before accepting production uploads.
 4. In a non-production deployment, run the full journey with
    `PAYMENT_ADAPTER=mock`.
 5. Set `PAYMENT_ADAPTER=stripe`, `coinbase`, or `multi` only after configuring
@@ -24,9 +27,9 @@ custody, customs filing, or country-specific statutory e-invoicing.
    `/api/v1/payments/webhooks/stripe` and
    `/api/v1/payments/webhooks/coinbase`.
 6. Run provider sandbox checkout, duplicate webhook, stale signature, expiry,
-   partial refund, reconciliation, and settlement-reference drills.
-7. Enable the tenant feature flag only after backup/restore and rollback
-   evidence is attached to the release record.
+   partial refund, manual reconciliation, and settlement-reference drills.
+7. Expand authorization/deployment rollout only after backup/restore and
+   rollback evidence is attached to the release record.
 
 Production startup intentionally fails when `PAYMENT_ADAPTER=mock`.
 
@@ -40,6 +43,9 @@ Production startup intentionally fails when `PAYMENT_ADAPTER=mock`.
   state, refunds, and credit notes.
 - `/dashboard`: prioritize review backlog, expiring quotes, delayed legs,
   carrier exceptions, stale check-ins, failed payments, and overdue balances.
+- `/freight`: customers see booking milestones as a chronological movement
+  timeline. The related API also returns legs, check-ins, exceptions, and POD,
+  but the UI is not a continuous GPS or unified billing/travel audit feed.
 
 Sea, air, and rail legs use carrier references and operator milestones. Driver
 and vehicle assignment is valid only for road legs. `GPS` is reserved and is
@@ -51,8 +57,9 @@ not an accepted check-in source.
    webhooks are authoritative.
 2. Preserve the durable `PaymentEvent` receipt, provider event identifier,
    payload hash, session reference, invoice number, and correlation ID.
-3. For a missing webhook, poll the non-terminal provider session and compare it
-   with the provider dashboard. Do not synthesize a success event.
+3. For a missing webhook, compare the session with the provider dashboard and
+   restore webhook delivery. Automated provider-session polling is not
+   implemented; do not synthesize a success event.
 4. Replay the provider event only after signature and timestamp validation.
    Duplicate provider event IDs must remain no-ops.
 5. Confirm the allocation equals the provider-confirmed amount and that the
@@ -85,3 +92,6 @@ booking.
 - Driver phone ciphertext and contact-bearing documents require restricted
   access. Signed object links should be short-lived and must not be written to
   logs.
+- Production invoice email delivery is not implemented. Operators must use the
+  authenticated invoice document endpoint until an SMTP adapter with retry and
+  dead-letter evidence is added.

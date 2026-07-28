@@ -1,7 +1,10 @@
 # Product and implementation phase roadmap
 
-This roadmap preserves the remaining product scope in the repository. It is a
-continuation plan, not a claim that the listed capabilities exist.
+This roadmap records the implemented product scope and retained release
+boundaries. Phases 1–12 have repository-level automated evidence; Phase 13
+adds the international operating structure and is subject to its recorded
+validation/provider boundaries. Production
+provider activation and external release evidence remain separate.
 
 The authoritative current status remains
 [IMPLEMENTATION_STATUS.md](../../IMPLEMENTATION_STATUS.md).
@@ -251,6 +254,82 @@ Demonstrate that the full platform can be operated safely at the agreed SLOs.
 All repository gates, Docker startup, domain-critical E2E scenarios, tenant
 isolation, inventory concurrency, balanced finance, restore drills, and the
 agreed performance targets pass with recorded evidence.
+
+## Phase 12 — Global freight, billing, payments, and driver coordination
+
+### Goal
+
+Let authenticated individuals and businesses request global multimodal
+transport, receive and accept a reviewed quote, receive an invoice, pay through
+a hosted provider or approved terms, and follow execution to proof of delivery.
+
+### Implemented capabilities
+
+- Road, sea, air, and rail requests with stops, cargo, document upload signing,
+  non-binding estimates, reviewed immutable quote revisions, and atomic booking
+  acceptance.
+- Ordered legs, modal milestones, operational exceptions, proof of delivery,
+  internal/subcontracted carriers, and road driver/vehicle assignments.
+- A restricted `driver-coordinator` role, encrypted driver phones, manual
+  phone/SMS/WhatsApp/carrier-portal check-ins, and worker-created overdue
+  exceptions.
+- Canonical invoices, schedules, hosted Stripe Checkout and Coinbase Business
+  Checkout adapters, durable signed payment events, allocations, refunds,
+  credit notes, and balanced journals.
+- Customer freight, freight operations, dispatch, billing, and analytical
+  dashboard workspaces.
+- A chronological booking milestone timeline. Continuous GPS and a unified
+  quote/payment/travel audit feed are not claimed.
+
+### Exit scenario
+
+An authenticated customer submits freight demand, accepts an operator-published
+quote, satisfies the required schedule, follows planned multimodal legs and
+manual road check-ins, and receives proof of delivery and a complete booking.
+The local provider-neutral journey, tenant/permission denial, and
+desktop/mobile workspaces pass. Deployment-specific Stripe/Coinbase sandbox,
+webhook reachability, reconciliation, refund, and restore drills remain release
+evidence.
+
+## Phase 13 — International logistics, insurance, consolidation, and postal exchange
+
+### Goal
+
+Separate and operate the international objects that a freight booking alone
+cannot represent: consignment, transport/customs documents, insured interest,
+physical handling units, shared movements, and postal exchange levels.
+
+### Implemented capabilities
+
+- Versioned international code-list provenance and standard locations with
+  UN/LOCODE, IATA, IMPC, GLN, function, coordinate, and time-zone fields.
+- Transport parties, consignments, immutable document revisions, and
+  WCO-oriented customs filing transitions.
+- Versioned cargo-insurance providers/products, eligibility and premium
+  calculation, canonical premium invoice, payment-gated policy activation,
+  certificates, claims, decisions, and event evidence.
+- Logistics hubs, nested handling units, cargo allocation, custody scans,
+  condition exceptions, SSCC check digits, and maritime VGM gates.
+- Cross-booking consolidation, capacity/cutoff controls, load positions,
+  shared linehaul allocation, arrival, deconsolidation, and distribution.
+- Postal operators/products and independent item, receptacle, dispatch, postal
+  consignment, and event records with S10 check-digit validation.
+- Least-privilege roles, customer/operations workspaces, worker monitoring,
+  and analytical exception signals.
+
+### Exit scenario
+
+An insured international consignment is documented and lodged for customs,
+received into a traceable handling unit, consolidated with capacity controls,
+allocated to shared linehaul, deconsolidated, and distributed. In parallel, an
+international postal item receives a valid S10 identifier, moves through a
+receptacle and dispatch, and records idempotent exchange events. Premium
+payment activates coverage, a customer can submit an owned claim, and all
+cross-tenant/permission attempts are denied.
+
+Provider/dataset licensing, national customs and postal EDI, carrier network
+conformance, dangerous-goods certification, and jurisdictional legal approval
+remain external release evidence.
 
 ## Cross-phase definition of done
 

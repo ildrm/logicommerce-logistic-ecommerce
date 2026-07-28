@@ -8,6 +8,7 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm test:phase12:live
 docker compose config
 ```
 
@@ -31,6 +32,8 @@ Every domain pull request must update documentation in the same change:
 - schema/migration and operational notes;
 - permissions, tenant-isolation, audit, and idempotency behavior;
 - known limitations and mock integrations;
+- customer-visible timelines when a state transition, milestone, exception, or
+  proof requirement changes;
 - `IMPLEMENTATION_STATUS.md` when evidence changes;
 - `docs/testing/verification-record.md` with commands actually run;
 - `CHANGELOG.md` for notable behavior.

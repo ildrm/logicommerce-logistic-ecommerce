@@ -367,6 +367,16 @@ export class BillingService {
           });
         }
       }
+      if (invoice.sourceType === 'CARGO_INSURANCE' && fullyPaid) {
+        await tx.cargoInsurancePolicy.updateMany({
+          where: {
+            id: invoice.sourceId,
+            tenantId: session.tenantId,
+            status: 'AWAITING_PAYMENT',
+          },
+          data: { status: 'ACTIVE', version: { increment: 1 } },
+        });
+      }
       const [cash, receivable] = await Promise.all([
         tx.financialAccount.findFirst({
           where: {

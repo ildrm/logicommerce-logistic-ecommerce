@@ -8,6 +8,11 @@ cross-tenant access or payout abuse, revoke affected sessions and credentials,
 pause payouts and automated delivery, and keep append-only journals intact.
 Recovery uses compensating entries and explicit state transitions.
 
+For a freight or payment incident, also preserve raw-signature verification
+metadata, durable provider event receipts, quote revisions, booking milestones,
+driver check-ins, exceptions, POD evidence, and invoice allocations. A browser
+checkout return or unverified location update is never recovery evidence.
+
 ## Rollout and rollback
 
 Deploy additive schema changes before readers depend on them. Use a canary,
@@ -25,3 +30,8 @@ signatures, then revoke the old version after the maximum token/replay window.
 Record the owner, reason, timestamps, affected key identifiers, verification,
 and rollback window. Secrets and raw keys must never enter repository files,
 logs, metrics, tickets, or recovery evidence.
+
+Rotate field-encryption, JWT/session, Shop webhook, Stripe webhook, Coinbase
+webhook, and object-storage credentials as separate key classes. Driver phone
+ciphertext requires a documented re-encryption plan before retiring its
+encryption key.

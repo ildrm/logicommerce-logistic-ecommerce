@@ -17,3 +17,18 @@ scopes, and security-sensitive changes are audited.
 Development uses a labeled in-memory identity-mail adapter. Production requires
 a real adapter. OIDC/social providers plug into the provider-neutral identity
 port; no external vendor is bundled.
+
+The implemented API also covers catalog and commerce, fulfillment, C2C, B2B,
+partner APIs, returns/finance, 3PL–5PL operations, analytics, global freight,
+dispatch, canonical billing, and payment webhooks. Freight bookings return
+ordered legs, chronological milestones, assignment check-ins, exceptions, and
+proof-of-delivery evidence. Stripe and Coinbase completion is webhook-driven;
+the synchronous payment mock is development/test-only and fails closed in
+production.
+
+Phase 13 APIs add `/international-logistics`, `/logistics-network`,
+`/insurance`, and `/postal`. They separate parties/consignments/documents and
+customs, physical handling units and consolidation/shared linehaul, premium
+invoicing and claims, and postal item/receptacle/dispatch/consignment events.
+Every customer read is ownership-scoped; every operations route has an
+explicit permission.

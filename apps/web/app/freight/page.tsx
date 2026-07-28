@@ -68,6 +68,29 @@ type Booking = {
     occurredAt: string;
   }>;
 };
+type Insurance = {
+  quotes: Array<{
+    id: string;
+    number: string;
+    status: string;
+    currency: string;
+    insuredValueMinor: number;
+    totalMinor: number;
+    validUntil: string;
+    product: { name: string; coverageLevel: string; clauses: string[] };
+  }>;
+  policies: Array<{
+    id: string;
+    policyNumber: string;
+    certificateNumber: string;
+    status: string;
+    currency: string;
+    insuredValueMinor: number;
+    coverageStartAt: string;
+    coverageEndAt: string;
+    claims: Array<{ id: string; number: string; status: string; cause: string }>;
+  }>;
+};
 
 const money = (minor: number, currency = 'USD') =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(Number(minor) / 100);
@@ -77,6 +100,7 @@ export default function FreightPage() {
   const [requests, setRequests] = useState<FreightRequest[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [insurance, setInsurance] = useState<Insurance>({ quotes: [], policies: [] });
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -86,14 +110,16 @@ export default function FreightPage() {
       return;
     }
     try {
-      const [requestRows, bookingRows, invoiceRows] = await Promise.all([
+      const [requestRows, bookingRows, invoiceRows, insuranceRows] = await Promise.all([
         authenticatedRequest<FreightRequest[]>('/freight/requests'),
         authenticatedRequest<Booking[]>('/freight/bookings/mine'),
         authenticatedRequest<Invoice[]>('/billing/invoices/mine'),
+        authenticatedRequest<Insurance>('/insurance/mine'),
       ]);
       setRequests(requestRows);
       setBookings(bookingRows);
       setInvoices(invoiceRows);
+      setInsurance(insuranceRows);
       setSignedIn(true);
     } catch (error) {
       setSignedIn(true);
@@ -143,6 +169,7 @@ export default function FreightPage() {
               packageCount: Number(form.get('packageCount')),
               weightGrams: Math.round(Number(form.get('weightKg')) * 1000),
               currency: 'USD',
+              declaredValueMinor: Math.round(Number(form.get('declaredValue')) * 100),
               hazardous: form.get('hazardous') === 'on',
             },
           ],
@@ -167,6 +194,57 @@ export default function FreightPage() {
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Quote could not be accepted.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function acceptInsuranceQuote(quoteId: string) {
+    setBusy(true);
+    try {
+      await authenticatedRequest(`/insurance/quotes/${quoteId}/accept`, { method: 'POST' });
+      setMessage('Cargo-insurance coverage bound and certificate issued.');
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Insurance quote could not be accepted.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitClaim(event: FormEvent<HTMLFormElement>, policyId: string) {
+    event.preventDefault();
+    setBusy(true);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    try {
+      const claim = await authenticatedRequest<{ id: string; version: number }>(
+        `/insurance/policies/${policyId}/claims`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            cause: form.get('cause'),
+            lossOccurredAt: form.get('lossOccurredAt'),
+            discoveredAt: form.get('discoveredAt'),
+            lossLocation: form.get('lossLocation'),
+            description: form.get('description'),
+            claimedAmountMinor: Math.round(Number(form.get('claimedAmount')) * 100),
+            currency: form.get('currency'),
+          }),
+        },
+      );
+      await authenticatedRequest(`/insurance/claims/${claim.id}/transition`, {
+        method: 'POST',
+        body: JSON.stringify({
+          status: 'SUBMITTED',
+          version: claim.version,
+        }),
+      });
+      formElement.reset();
+      setMessage('Cargo loss submitted with an auditable claim event history.');
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Claim could not be created.');
     } finally {
       setBusy(false);
     }
@@ -344,6 +422,17 @@ export default function FreightPage() {
                     <input name="weightKg" type="number" min="1" step="0.1" required />
                   </label>
                   <label>
+                    <span>Declared cargo value (USD)</span>
+                    <input
+                      name="declaredValue"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue="10000"
+                      required
+                    />
+                  </label>
+                  <label>
                     <span>Service level</span>
                     <select name="serviceLevel">
                       <option>STANDARD</option>
@@ -390,6 +479,97 @@ export default function FreightPage() {
                 Submit for review
               </button>
             </form>
+          </section>
+
+          <section className="report-panel">
+            <div className="report-heading">
+              <div>
+                <h2>Cargo insurance</h2>
+                <p>Coverage quotes, policy certificates, and loss claims</p>
+              </div>
+            </div>
+            <div className="freight-card-list">
+              {insurance.quotes.map((quote) => (
+                <article className="invoice-card" key={quote.id}>
+                  <div>
+                    <span className="status-word">{quote.status.toLowerCase()}</span>
+                    <h3>{quote.product.name}</h3>
+                    <p>
+                      {quote.product.coverageLevel.replaceAll('_', ' ').toLowerCase()} ·{' '}
+                      {quote.product.clauses.join(', ')}
+                    </p>
+                  </div>
+                  <strong>{money(quote.totalMinor, quote.currency)}</strong>
+                  <small>
+                    {money(quote.insuredValueMinor, quote.currency)} insured · valid through{' '}
+                    {new Date(quote.validUntil).toLocaleDateString()}
+                  </small>
+                  {quote.status === 'QUOTED' ? (
+                    <button
+                      className="button button--primary"
+                      disabled={busy}
+                      onClick={() => void acceptInsuranceQuote(quote.id)}
+                    >
+                      Bind coverage
+                    </button>
+                  ) : null}
+                </article>
+              ))}
+              {insurance.policies.map((policy) => (
+                <article className="freight-card" key={policy.id}>
+                  <span className="status-word">{policy.status.toLowerCase()}</span>
+                  <h3>{policy.policyNumber}</h3>
+                  <p>
+                    Certificate {policy.certificateNumber} ·{' '}
+                    {money(policy.insuredValueMinor, policy.currency)} insured
+                  </p>
+                  <small>
+                    Coverage {new Date(policy.coverageStartAt).toLocaleDateString()} –{' '}
+                    {new Date(policy.coverageEndAt).toLocaleDateString()}
+                  </small>
+                  <form
+                    className="stack-form"
+                    onSubmit={(event) => void submitClaim(event, policy.id)}
+                  >
+                    <select name="cause">
+                      <option>DAMAGE</option>
+                      <option>THEFT</option>
+                      <option>LOSS</option>
+                      <option>GENERAL_AVERAGE</option>
+                      <option>WET_DAMAGE</option>
+                      <option>TEMPERATURE_EXCURSION</option>
+                      <option>DELAY</option>
+                      <option>OTHER</option>
+                    </select>
+                    <input name="lossLocation" required placeholder="Loss location" />
+                    <input name="lossOccurredAt" type="datetime-local" required />
+                    <input name="discoveredAt" type="datetime-local" required />
+                    <input
+                      name="claimedAmount"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      required
+                      placeholder="Claim amount"
+                    />
+                    <input name="currency" value={policy.currency} readOnly />
+                    <textarea name="description" required placeholder="Loss circumstances" />
+                    <button disabled={busy}>Save draft claim</button>
+                  </form>
+                  {policy.claims.map((claim) => (
+                    <small key={claim.id}>
+                      {claim.number} · {claim.cause.replaceAll('_', ' ').toLowerCase()} ·{' '}
+                      {claim.status.toLowerCase()}
+                    </small>
+                  ))}
+                </article>
+              ))}
+              {insurance.quotes.length === 0 && insurance.policies.length === 0 ? (
+                <p className="panel-empty">
+                  Request insurance on a shipment; operations will issue a product-specific quote.
+                </p>
+              ) : null}
+            </div>
           </section>
 
           <section className="report-panel">

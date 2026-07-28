@@ -358,6 +358,9 @@ export function TransportConsole({ surface }: { surface: 'freight' | 'dispatch' 
           <a className={surface === 'billing' ? 'is-active' : ''} href="/operations/billing">
             Billing
           </a>
+          <a href="/operations/network">Network</a>
+          <a href="/operations/insurance">Insurance</a>
+          <a href="/operations/postal">Postal</a>
         </nav>
       </div>
       {signedIn === false ? (

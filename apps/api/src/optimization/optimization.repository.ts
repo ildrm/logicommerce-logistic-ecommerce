@@ -96,7 +96,7 @@ export class OptimizationRepository {
           inputHash,
         },
       },
-      include: { recommendations: true },
+      include: { recommendations: { orderBy: { rank: 'asc' } } },
     });
     if (existing) return existing;
     const recommendations = this.optimizer.recommend(
@@ -138,7 +138,7 @@ export class OptimizationRepository {
           })),
         },
       },
-      include: { recommendations: true },
+      include: { recommendations: { orderBy: { rank: 'asc' } } },
     });
   }
 

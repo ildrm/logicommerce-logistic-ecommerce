@@ -63,18 +63,28 @@ export default function AccountPage() {
 
   async function hydrate(accessToken: string) {
     try {
-      const current = (await request('/auth/me', {}, accessToken)) as User;
-      const activeSessions = (await request('/auth/sessions', {}, accessToken)) as Session[];
+      const [current, activeSessions] = (await Promise.all([
+        request('/auth/me', {}, accessToken),
+        request('/auth/sessions', {}, accessToken),
+      ])) as [User, Session[]];
+      const canManageRoles = current.permissions.includes('identity.roles.manage');
+      const canManageUsers = current.permissions.includes('identity.users.manage');
+      const [availableRoles, availablePermissions, availableUsers] = (await Promise.all([
+        canManageRoles ? request('/identity/roles', {}, accessToken) : Promise.resolve([]),
+        canManageRoles ? request('/identity/permissions', {}, accessToken) : Promise.resolve([]),
+        canManageUsers ? request('/identity/users', {}, accessToken) : Promise.resolve([]),
+      ])) as [Role[], Permission[], ManagedUser[]];
+
+      // Commit the authenticated view only after every authorized hydration
+      // request succeeds. This prevents navigation from observing a partially
+      // hydrated account and then clearing a valid token when an in-flight
+      // auxiliary request is aborted.
       setToken(accessToken);
       setUser(current);
       setSessions(activeSessions);
-      if (current.permissions.includes('identity.roles.manage')) {
-        setRoles((await request('/identity/roles', {}, accessToken)) as Role[]);
-        setPermissions((await request('/identity/permissions', {}, accessToken)) as Permission[]);
-      }
-      if (current.permissions.includes('identity.users.manage')) {
-        setManagedUsers((await request('/identity/users', {}, accessToken)) as ManagedUser[]);
-      }
+      setRoles(availableRoles);
+      setPermissions(availablePermissions);
+      setManagedUsers(availableUsers);
     } catch (error) {
       window.sessionStorage.removeItem('logicommerce_access');
       setToken('');

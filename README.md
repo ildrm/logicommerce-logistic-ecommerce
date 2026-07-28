@@ -32,6 +32,11 @@ Primary product workspaces are `/dashboard`, `/freight`, `/storefront`,
 `/account`, `/operations`, `/operations/freight`, `/operations/dispatch`, and
 `/operations/billing`.
 
+Freight bookings expose a chronological travel-and-event timeline in
+`/freight`. It is built from recorded transport milestones, manual driver
+check-ins, and proof-of-delivery events; it is not continuous GPS tracking. See
+the [freight journey timeline](docs/logistics/freight-journey-timeline.md).
+
 The reverse proxy is the normal application entry point. MySQL, Redis, and
 MinIO API ports are exposed only in the development override.
 
@@ -64,11 +69,16 @@ pnpm test:phase12:live
 See the [documentation map](docs/README.md),
 [continuation guide](docs/development/continuation-guide.md),
 [implementation status](IMPLEMENTATION_STATUS.md), and
-[phase roadmap](docs/product/phase-roadmap.md).
+[phase roadmap](docs/product/phase-roadmap.md). The
+[documentation audit](docs/testing/documentation-audit-2026-07-28.md) records
+the current documentation review boundary.
 
 ## Continue implementation
 
-Phases 0–12 have repository-level automated evidence. Preserve the tested
+Phases 0–12 have repository-level automated evidence. Phase 13 adds the
+international logistics structure required for consignments, transport and
+customs documents, cargo insurance/claims, hubs and consolidation, physical
+handling units, shared linehaul, and postal exchange. Preserve the tested
 tenancy, ledger, idempotency, approval, and webhook invariants while selecting
 regional production providers and obtaining Stripe/Coinbase sandbox,
 authorized CI security/SBOM, measured coverage, penetration-test, and provider
@@ -84,6 +94,11 @@ restore evidence.
 - `infrastructure` — reverse proxy and operational configuration.
 - `tests` — cross-application and performance test foundations.
 - `mockups/control-tower` — retained visual design reference.
+
+The [international logistics audit](docs/product/international-logistics-system-audit.md)
+lists the transportation, logistics, postal, and product findings and their
+disposition. The [international standards map](docs/logistics/international-standards-map.md)
+explains alignment and the external certification boundary.
 
 Stripe Checkout and Coinbase Business Checkout adapters are implemented but
 are inactive without deployment secrets and sandbox certification. The

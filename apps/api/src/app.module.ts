@@ -11,6 +11,7 @@ import { FulfillmentModule } from './fulfillment/fulfillment.module.js';
 import { FreightModule } from './freight/freight.module.js';
 import { HealthModule } from './health/health.module.js';
 import { IdentityModule } from './identity/identity.module.js';
+import { InternationalLogisticsModule } from './international-logistics/international-logistics.module.js';
 import { NetworkOperationsModule } from './network-operations/network-operations.module.js';
 import { OperabilityModule } from './operability/operability.module.js';
 import { OptimizationModule } from './optimization/optimization.module.js';
@@ -30,6 +31,7 @@ import { TenancyModule } from './tenancy/tenancy.module.js';
     CommerceModule,
     FulfillmentModule,
     FreightModule,
+    InternationalLogisticsModule,
     C2CModule,
     B2BModule,
     BillingModule,

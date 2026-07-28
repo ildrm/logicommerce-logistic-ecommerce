@@ -1,10 +1,11 @@
 # Full implementation plan
 
-This is the execution plan for completing Phases 1–11. The accepted modular
-monolith remains the default: modules own their application services and
-repositories, use tenant-scoped persistence, and communicate asynchronously
-through the transactional outbox. A phase advances only when its roadmap exit
-scenario has automated evidence.
+This is the retained execution plan for Phases 1–12. All phases have
+repository-level automated evidence; the remaining release plan is provider
+activation and external production evidence. The modular monolith remains the
+default: modules own their application services and repositories, use
+tenant-scoped persistence, and communicate asynchronously through the
+transactional outbox.
 
 ## Delivery sequence
 
@@ -42,6 +43,12 @@ scenario has automated evidence.
     tests, SAST/dependency/container scanning and SBOM, metrics/traces/alerts,
     runbooks, backup/restore and DR exercises, secrets/key rotation, rollout and
     rollback evidence.
+12. **Global freight and canonical billing** — multimodal requests, reviewed
+    estimates and immutable quote revisions, bookings and ordered legs,
+    milestones, internal/subcontracted road dispatch, manual driver check-ins,
+    overdue exceptions, proof of delivery, canonical invoices/schedules,
+    hosted Stripe/Coinbase checkout, signed payment webhooks, refunds, and
+    customer/operator workspaces.
 
 ## Cross-phase implementation contract
 
@@ -57,10 +64,10 @@ metrics, unit/integration/E2E tests, and updated status/verification documents.
 - Mobile 4G: LCP <= 2.0 s, INP <= 100 ms, CLS <= 0.1.
 - Availability after hardening: 99.95%; RPO <= 15 minutes; RTO <= 60 minutes.
 - Domain-critical coverage before phase exit: at least 80%.
-- All final acceptance journeys A–I and tenant/inventory/finance invariants
+- All final acceptance journeys A–J and tenant/inventory/finance invariants
   pass through the production-like Compose topology.
 
-## Immediate Phase 1 slices
+## Completed foundation sequence
 
 1. **Completed 2026-07-22:** trusted domain resolution, auth endpoint rate
    limits, reusable permission decorators/guards, denied-action audit, and live
@@ -75,6 +82,10 @@ metrics, unit/integration/E2E tests, and updated status/verification documents.
    machine credentials, security audit evidence, isolated CI integration, and
    Phase 1 exit-scenario evidence.
 
-Phases 1–3 are `TESTED`. The immediate implementation target is now Phase 4:
-facilities and inbound receiving followed by fulfillment orders, warehouse
-execution, carrier adapters, shipments, tracking, and delivery.
+Phases 0–12 are `TESTED` at the repository boundary. The immediate target is
+release evidence: Stripe/Coinbase sandbox certification, webhook reachability
+and refund/reconciliation drills, authorized CI security/SBOM output, measured
+domain-critical coverage, penetration testing, and a production-equivalent
+database/object-store restore exercise. Production SMTP, active malware
+scanning, provider-session polling, feature-flag rollout, and any GPS provider
+remain explicit implementation work.

@@ -1,6 +1,8 @@
 # Technology versions
 
 Verified on 2026-07-21 against official release channels and the npm registry.
+The lockfile, rather than this snapshot, remains authoritative. Documentation
+was reviewed on 2026-07-28 without changing the selected dependency lines.
 
 | Component         |        Selected | Rationale                                                                                 |
 | ----------------- | --------------: | ----------------------------------------------------------------------------------------- |
@@ -19,3 +21,8 @@ Verified on 2026-07-21 against official release channels and the npm registry.
 
 Package manifests use exact dependency versions. `pnpm-lock.yaml` is the final
 source of resolved transitive versions.
+
+External payment contracts target Stripe hosted Checkout fulfillment through
+signed webhooks and Coinbase Business Checkouts. Provider API behavior and
+signature rules must be revalidated against official documentation during each
+deployment certification.

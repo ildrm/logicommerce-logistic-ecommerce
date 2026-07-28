@@ -10,6 +10,9 @@ const roleId = '00000000-0000-4000-8000-000000000201';
 const viewerUserId = '00000000-0000-4000-8000-000000000103';
 const viewerRoleId = '00000000-0000-4000-8000-000000000202';
 const driverCoordinatorRoleId = '00000000-0000-4000-8000-000000000203';
+const hubOperatorRoleId = '00000000-0000-4000-8000-000000000204';
+const postalOperatorRoleId = '00000000-0000-4000-8000-000000000205';
+const insuranceAdjusterRoleId = '00000000-0000-4000-8000-000000000206';
 
 async function seed() {
   const passwordHash = await hash('ChangeMe-Local-Only-2026');
@@ -298,6 +301,71 @@ async function seed() {
           'payment.use',
           'Create hosted payment sessions for owned invoices.',
         ],
+        [
+          '00000000-0000-4000-8000-000000000354',
+          'international.reference.manage',
+          'Manage governed international location and code-list reference data.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000355',
+          'transport.document.manage',
+          'Manage consignments and versioned multimodal transport documents.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000356',
+          'customs.manage',
+          'Lodge and manage WCO-aligned customs filing records.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000357',
+          'insurance.use',
+          'View cargo-insurance products, accept quotes, and submit owned claims.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000358',
+          'insurance.manage',
+          'Manage insurance providers, products, and freight insurance quotes.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000359',
+          'insurance.claims.manage',
+          'Assess, approve, settle, and close cargo-insurance claims.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000360',
+          'logistics.network.read',
+          'Read hubs, handling units, consolidation plans, and shared linehauls.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000361',
+          'logistics.network.manage',
+          'Manage logistics hubs and international linehaul capacity.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000362',
+          'logistics.handling.manage',
+          'Build, scan, verify, and deconsolidate logistics handling units.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000363',
+          'logistics.consolidation.manage',
+          'Plan and execute consolidation, shared movements, and distribution.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000364',
+          'postal.use',
+          'Create and track customer-owned international postal items.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000365',
+          'postal.operate',
+          'Operate postal receptacles, dispatches, consignments, and events.',
+        ],
+        [
+          '00000000-0000-4000-8000-000000000366',
+          'postal.admin',
+          'Manage postal operators, products, routing, and reference configuration.',
+        ],
       ] as const
     ).map(([id, key, description]) =>
       database.permission.upsert({
@@ -335,6 +403,33 @@ async function seed() {
     create: { id: viewerRoleId, tenantId, key: 'viewer', name: 'Read-only viewer' },
   });
 
+  for (const [id, key, name, description] of [
+    [
+      hubOperatorRoleId,
+      'hub-operator',
+      'Hub and consolidation operator',
+      'Operates handling units, consolidation plans, and international hub movements.',
+    ],
+    [
+      postalOperatorRoleId,
+      'postal-operator',
+      'Postal operations coordinator',
+      'Operates UPU-style postal items, receptacles, dispatches, and transport handovers.',
+    ],
+    [
+      insuranceAdjusterRoleId,
+      'insurance-adjuster',
+      'Cargo insurance adjuster',
+      'Reviews and resolves cargo-insurance claims without broader tenant administration.',
+    ],
+  ] as const) {
+    await database.role.upsert({
+      where: { tenantId_key: { tenantId, key } },
+      update: { name, description },
+      create: { id, tenantId, key, name, description },
+    });
+  }
+
   await Promise.all(
     permissions.map((permission) =>
       database.rolePermission.upsert({
@@ -346,9 +441,14 @@ async function seed() {
   );
 
   const viewerGrants = permissions.filter((permission) =>
-    ['c2c.trade', 'transport.request.use', 'billing.invoice.read', 'payment.use'].includes(
-      permission.key,
-    ),
+    [
+      'c2c.trade',
+      'transport.request.use',
+      'billing.invoice.read',
+      'payment.use',
+      'insurance.use',
+      'postal.use',
+    ].includes(permission.key),
   );
   for (const permission of viewerGrants) {
     await database.rolePermission.upsert({
@@ -377,6 +477,31 @@ async function seed() {
       update: {},
       create: { roleId: driverCoordinatorRoleId, permissionId: permission.id },
     });
+  }
+
+  for (const [role, keys] of [
+    [
+      hubOperatorRoleId,
+      [
+        'logistics.network.read',
+        'logistics.network.manage',
+        'logistics.handling.manage',
+        'logistics.consolidation.manage',
+        'transport.document.manage',
+      ],
+    ],
+    [postalOperatorRoleId, ['postal.operate', 'logistics.network.read']],
+    [insuranceAdjusterRoleId, ['insurance.claims.manage', 'logistics.network.read']],
+  ] as const) {
+    for (const permission of permissions.filter(({ key }) =>
+      (keys as readonly string[]).includes(key),
+    )) {
+      await database.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: role, permissionId: permission.id } },
+        update: {},
+        create: { roleId: role, permissionId: permission.id },
+      });
+    }
   }
 
   await database.user.upsert({
@@ -745,6 +870,212 @@ async function seed() {
       },
     });
   }
+
+  const rotterdamLocationId = '00000000-0000-4000-8000-000000000531';
+  const singaporeLocationId = '00000000-0000-4000-8000-000000000532';
+  for (const location of [
+    {
+      id: rotterdamLocationId,
+      unLocode: 'NLRTM',
+      iataCode: 'RTM',
+      impcCode: 'NLRTMA',
+      gln: '8712345000016',
+      name: 'Rotterdam multimodal gateway',
+      countryCode: 'NL',
+      functions: ['PORT', 'AIRPORT', 'RAIL_TERMINAL', 'ROAD_TERMINAL', 'IMPC'],
+      latitude: 51.9244,
+      longitude: 4.4777,
+      timeZone: 'Europe/Amsterdam',
+    },
+    {
+      id: singaporeLocationId,
+      unLocode: 'SGSIN',
+      iataCode: 'SIN',
+      impcCode: 'SGSINA',
+      gln: '8882345000015',
+      name: 'Singapore multimodal gateway',
+      countryCode: 'SG',
+      functions: ['PORT', 'AIRPORT', 'RAIL_TERMINAL', 'ROAD_TERMINAL', 'IMPC'],
+      latitude: 1.3521,
+      longitude: 103.8198,
+      timeZone: 'Asia/Singapore',
+    },
+  ] as const) {
+    await database.standardLocation.upsert({
+      where: { id: location.id },
+      update: {
+        name: location.name,
+        functions: location.functions,
+        standardVersion: 'UN/LOCODE 2026-1 demo subset',
+      },
+      create: {
+        ...location,
+        tenantId,
+        standardVersion: 'UN/LOCODE 2026-1 demo subset',
+      },
+    });
+  }
+
+  await database.internationalCodeList.upsert({
+    where: {
+      tenantId_authority_listName_version: {
+        tenantId,
+        authority: 'UNECE',
+        listName: 'UN/LOCODE',
+        version: '2026-1-demo',
+      },
+    },
+    update: {},
+    create: {
+      id: '00000000-0000-4000-8000-000000000533',
+      tenantId,
+      authority: 'UNECE',
+      listName: 'UN/LOCODE',
+      version: '2026-1-demo',
+      effectiveAt: new Date('2026-07-01T00:00:00.000Z'),
+      sourceUrl: 'https://unlocode.unece.org/',
+      checksum: 'demo-reference-data-not-for-regulatory-use',
+      importedBy: userId,
+    },
+  });
+
+  for (const hub of [
+    {
+      id: '00000000-0000-4000-8000-000000000534',
+      locationId: rotterdamLocationId,
+      code: 'RTM-GATEWAY',
+      name: 'Rotterdam gateway and consolidation hub',
+      type: 'GATEWAY',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000535',
+      locationId: singaporeLocationId,
+      code: 'SIN-GATEWAY',
+      name: 'Singapore gateway and distribution hub',
+      type: 'GATEWAY',
+    },
+  ] as const) {
+    await database.logisticsHub.upsert({
+      where: { tenantId_code: { tenantId, code: hub.code } },
+      update: { name: hub.name },
+      create: {
+        ...hub,
+        tenantId,
+        customsBonded: true,
+        capabilities: [
+          'CONSOLIDATION',
+          'DECONSOLIDATION',
+          'CROSS_DOCK',
+          'CUSTOMS',
+          'POSTAL_EXCHANGE',
+        ],
+      },
+    });
+  }
+
+  const insuranceProviderId = '00000000-0000-4000-8000-000000000536';
+  await database.cargoInsuranceProvider.upsert({
+    where: { tenantId_key: { tenantId, key: 'demo-marine-underwriter' } },
+    update: { status: 'ACTIVE' },
+    create: {
+      id: insuranceProviderId,
+      tenantId,
+      key: 'demo-marine-underwriter',
+      name: 'Demo International Cargo Underwriter',
+      kind: 'BROKER',
+      countries: ['NL', 'SG', 'US'],
+      modes: ['ROAD', 'SEA', 'AIR', 'RAIL', 'MULTIMODAL'],
+      currencies: ['USD'],
+      licenseRefs: {
+        disclaimer: 'Demonstration catalog; production activation requires licensed underwriting.',
+      },
+    },
+  });
+
+  await database.cargoInsuranceProduct.upsert({
+    where: {
+      tenantId_providerId_code_version: {
+        tenantId,
+        providerId: insuranceProviderId,
+        code: 'ICC-A-MULTIMODAL',
+        version: 1,
+      },
+    },
+    update: { status: 'ACTIVE' },
+    create: {
+      id: '00000000-0000-4000-8000-000000000537',
+      tenantId,
+      providerId: insuranceProviderId,
+      code: 'ICC-A-MULTIMODAL',
+      name: 'Institute Cargo Clauses (A) multimodal demo cover',
+      policyType: 'SINGLE_TRANSIT',
+      coverageLevel: 'ICC_A',
+      clauses: ['ICC(A)', 'WAR_OPTIONAL', 'STRIKES_OPTIONAL', 'WAREHOUSE_TO_WAREHOUSE'],
+      exclusions: [
+        'WILFUL_MISCONDUCT',
+        'ORDINARY_LEAKAGE_OR_WEAR',
+        'INSUFFICIENT_PACKING',
+        'INHERENT_VICE',
+        'DELAY',
+        'INSOLVENCY',
+        'NUCLEAR',
+      ],
+      supportedModes: ['ROAD', 'SEA', 'AIR', 'RAIL', 'MULTIMODAL'],
+      supportedCountries: ['NL', 'SG', 'US'],
+      currency: 'USD',
+      rateBasisPoints: 35,
+      minimumPremiumMinor: 7500n,
+      deductibleType: 'FIXED',
+      deductibleValue: 50000,
+      valuationUpliftPercent: 10,
+      effectiveAt: new Date('2026-01-01T00:00:00.000Z'),
+      version: 1,
+    },
+  });
+
+  const postalOperatorId = '00000000-0000-4000-8000-000000000538';
+  await database.postalOperator.upsert({
+    where: { tenantId_code: { tenantId, code: 'DEMOPOST' } },
+    update: { status: 'ACTIVE' },
+    create: {
+      id: postalOperatorId,
+      tenantId,
+      code: 'DEMOPOST',
+      name: 'Demo International Postal Operator',
+      countryCode: 'NL',
+      designated: false,
+      identifiers: {
+        note: 'Demo operator; production exchange requires UPU-designated credentials and agreements.',
+      },
+    },
+  });
+
+  await database.postalProduct.upsert({
+    where: {
+      tenantId_operatorId_code: {
+        tenantId,
+        operatorId: postalOperatorId,
+        code: 'INTL-PARCEL',
+      },
+    },
+    update: { status: 'ACTIVE' },
+    create: {
+      id: '00000000-0000-4000-8000-000000000539',
+      tenantId,
+      operatorId: postalOperatorId,
+      code: 'INTL-PARCEL',
+      name: 'Tracked international parcel',
+      category: 'PARCEL',
+      tracked: true,
+      registered: true,
+      insured: true,
+      signatureRequired: true,
+      customsRequired: true,
+      maxWeightGrams: 30_000n,
+      maxDimensions: { longestSideCm: 150, lengthPlusGirthCm: 300 },
+      serviceStandard: { targetBusinessDays: { min: 5, max: 12 } },
+    },
+  });
 
   await database.serviceLevelObjective.upsert({
     where: { tenantId_key: { tenantId, key: 'api-availability' } },

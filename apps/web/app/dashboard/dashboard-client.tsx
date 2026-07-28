@@ -73,6 +73,21 @@ type AnalyticsOverview = {
     bookingsByStatus: Record<string, number>;
     bookingsByMode: Record<string, number>;
   };
+  international: {
+    insuranceClaims: number;
+    openInsuranceClaims: number;
+    handlingUnits: number;
+    handlingExceptions: number;
+    consolidationPlans: number;
+    activeConsolidations: number;
+    consolidationExceptions: number;
+    postalItems: number;
+    postalDispatches: number;
+    postalExceptions: number;
+    delayedPostalDispatches: number;
+    customsFilings: number;
+    customsHolds: number;
+  };
   domainActivity: Array<{
     key: string;
     label: string;
@@ -644,6 +659,58 @@ export function DashboardClient() {
                   ))}
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section className="report-panel transport-report" aria-labelledby="international-title">
+            <div className="report-heading report-heading--inline">
+              <div>
+                <h2 id="international-title">International logistics and postal control</h2>
+                <p>
+                  Physical-unit custody, consolidation, insurance claims, customs, and postal
+                  exchange risks
+                </p>
+              </div>
+              <a href="/operations/network">
+                Open logistics network <span aria-hidden="true">→</span>
+              </a>
+            </div>
+            <div className="transport-metrics">
+              <div>
+                <span>Handling units</span>
+                <strong>{number.format(data.international.handlingUnits)}</strong>
+                <small>{data.international.handlingExceptions} in exception</small>
+              </div>
+              <div>
+                <span>Active consolidations</span>
+                <strong>{number.format(data.international.activeConsolidations)}</strong>
+                <small>{data.international.consolidationExceptions} in exception</small>
+              </div>
+              <div>
+                <span>Insurance claims</span>
+                <strong>{number.format(data.international.openInsuranceClaims)}</strong>
+                <small>{data.international.insuranceClaims} total</small>
+              </div>
+              <div>
+                <span>Postal items</span>
+                <strong>{number.format(data.international.postalItems)}</strong>
+                <small>{data.international.postalExceptions} held, lost, or damaged</small>
+              </div>
+              <div>
+                <span>Postal dispatches</span>
+                <strong>{number.format(data.international.postalDispatches)}</strong>
+                <small>{data.international.delayedPostalDispatches} handovers late</small>
+              </div>
+              <div>
+                <span>Customs filings</span>
+                <strong>{number.format(data.international.customsFilings)}</strong>
+                <small>{data.international.customsHolds} on hold</small>
+              </div>
+            </div>
+            <div className="card-actions">
+              <a href="/operations/network">Consolidation and hubs</a>
+              <a href="/operations/insurance">Insurance and claims</a>
+              <a href="/operations/postal">Postal exchange</a>
             </div>
           </section>
 

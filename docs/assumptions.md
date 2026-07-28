@@ -8,8 +8,25 @@
 - Data is treated as regulated PII; raw payment instruments remain with licensed providers.
 - The initial deployment target is one Docker host; production orchestration is an extension.
 - English, USD, UTC, and United States are defaults, not hard-coded business constraints.
-- Mock adapters are used for payment, tax, address validation, carrier, identity verification, and malware scanning.
+- The synchronous payment mock is local/test-only. Stripe Checkout and Coinbase
+  Business Checkout adapters are implemented but require deployment sandbox
+  certification and secrets.
+- Tax, address validation, carrier, and identity verification use replaceable
+  development adapters. Upload quarantine metadata exists, but an active
+  production malware-scanning service is not bundled.
 - MySQL is the operational system of record; analytical workloads will be separated later.
+- Freight location history is reported through milestones and manual check-ins;
+  continuous GPS and browser geolocation are outside the current boundary.
+- International reference-data rows in the seed are demonstration subsets,
+  not licensed authoritative distributions. Production uses verified imports,
+  version provenance, and checksums.
+- The repository is not an insurer, GS1 issuing organization, customs
+  authority, or designated postal operator. Regulated functions require
+  licensed providers, identifiers, credentials, agreements, and country review.
+- Postal transport uses the item/receptacle/dispatch/consignment structure.
+  Real UPU EDI and remuneration are provider/operator adapter boundaries.
+- Dangerous-goods and customs fields capture evidence; they do not replace
+  certified classification, acceptance, screening, or filing services.
 
 ## Verifiable targets
 

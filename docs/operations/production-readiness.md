@@ -18,6 +18,10 @@ bodies, tokens, subject identifiers, or query values.
   expiring risk acceptance exists.
 - Production migration plans name the forward migration, compatibility window,
   verification query, and rollback decision point.
+- Freight/payment activation requires provider sandbox checkout, signed
+  duplicate/stale webhook, refund, settlement-reference, database/object-store
+  restore, and tenant/permission-denial evidence. The mock payment adapter is
+  forbidden in production.
 
 ## Runtime objectives
 
@@ -40,3 +44,9 @@ Retention policy changes are versioned and record their approver. A legal hold
 prevents deletion or anonymization until an authorized operator removes it.
 Production retention execution must run as a dry-run first and preserve an
 immutable count and digest of affected records.
+
+Driver contacts, optional coordinates, cargo/customs documents, invoice PDFs,
+and POD evidence require explicit retention and access policy. Current gaps
+that block a fully integrated production claim are SMTP invoice delivery,
+active upload malware scanning, automated provider-session reconciliation
+polling, tenant freight feature flags, and continuous GPS.

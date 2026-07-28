@@ -2,6 +2,10 @@
 
 Open `index.html` directly in any modern browser. No build step, server, external fonts, images, or packages are required.
 
+This is a retained visual reference, not a connected product dashboard. The
+implemented analytical surface is `/dashboard`; freight operations use
+`/operations/freight`, `/operations/dispatch`, and `/operations/billing`.
+
 ## Interactions
 
 - Filter the exception queue by **All**, **Critical**, or **Watch**, and select individual exception rows.

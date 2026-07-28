@@ -4,7 +4,7 @@ This is the canonical handoff for the next developer or coding agent. It
 records what was built, what was verified, which constraints are intentional,
 and where implementation must resume.
 
-Last updated: **2026-07-23**.
+Last updated: **2026-07-28**.
 
 ## Current project state
 
@@ -16,10 +16,18 @@ multi-tenant C2C, B2C, B2B, dropshipping, and 1PL–5PL platform.
 - Phase 2, stores, catalog, offers, and storefront, is `TESTED`.
 - Phase 3, inventory, cart, checkout, and B2C orders, is `TESTED`.
 - Phases 4–7, fulfillment through partner APIs, are `TESTED`.
-- Phases 8–11 are not complete. Some contain reusable packages or design
-  boundaries, but that does not satisfy their definitions of done.
+- Phases 8–11, returns/finance through hardening, are `TESTED` at the
+  repository evidence boundary.
+- Phase 12, global freight, canonical billing, hosted-payment adapters, and
+  driver coordination, is `TESTED` locally.
+- Phase 13, international consignments/documents/customs, cargo insurance,
+  handling units, consolidation/shared linehaul, and postal exchange, is
+  `TESTED` locally.
 - The visual control-tower prototype under `mockups/control-tower` is a design
   reference, not the production application.
+- Production provider activation, authorized external security evidence, SMTP,
+  active malware scanning, reconciliation polling, and live GPS are not
+  completed merely because ports or configuration fields exist.
 
 Always check [IMPLEMENTATION_STATUS.md](../../IMPLEMENTATION_STATUS.md) before
 describing a module as implemented.
@@ -67,6 +75,8 @@ curl -fsS \
 pnpm test:auth:live
 pnpm test:commerce:live
 pnpm test:network:live
+pnpm test:phase12:live
+pnpm test:phase13:live
 pnpm test:e2e
 ```
 
@@ -80,7 +90,17 @@ credentials, verification/reset/passwordless flows, token replay rejection,
 logout, and logout-all. Commerce coverage includes catalog approval, inventory,
 one-unit checkout concurrency, dropship PO acceptance, reconciliation, and
 cross-tenant denial. The E2E command covers desktop and mobile account,
-role-administration, and storefront journeys.
+role-administration, storefront, dashboard, freight, dispatch, and billing
+journeys. The Phase 12 live command covers request-to-POD, canonical invoice,
+mock prepayment, manual phone check-in, replay prevention, and tenant/
+permission denial.
+The Phase 13 command covers cargo-insurance premium activation and claims,
+transport parties/documents/customs, handling-unit custody, hub
+consolidation/capacity/VGM, postal item/receptacle/dispatch/consignment events,
+tenant denial, permission denial, and analytical signals. Run the
+authentication suite separately or clear only the disposable local Redis test
+cache before later live suites, because its final scenario deliberately
+exhausts the authentication rate limit.
 
 ### 5. Run the repository gates
 
@@ -101,15 +121,24 @@ when allowed to create Turbopack's internal process and in the Docker build.
 
 ## Local endpoints
 
-| Surface         | URL                                         |
-| --------------- | ------------------------------------------- |
-| Web application | `http://localhost:8080`                     |
-| Platform status | `http://localhost:8080/platform`            |
-| REST base       | `http://localhost:8080/api/v1`              |
-| Swagger UI      | `http://localhost:8080/api/docs`            |
-| API readiness   | `http://localhost:8080/api/v1/health/ready` |
-| Mailpit         | `http://localhost:8025`                     |
-| MinIO console   | `http://localhost:9001`                     |
+| Surface               | URL                                          |
+| --------------------- | -------------------------------------------- |
+| Web application       | `http://localhost:8080`                      |
+| Command dashboard     | `http://localhost:8080/dashboard`            |
+| Customer freight      | `http://localhost:8080/freight`              |
+| Freight operations    | `http://localhost:8080/operations/freight`   |
+| Dispatch operations   | `http://localhost:8080/operations/dispatch`  |
+| Billing operations    | `http://localhost:8080/operations/billing`   |
+| International network | `http://localhost:8080/operations/network`   |
+| Insurance operations  | `http://localhost:8080/operations/insurance` |
+| Postal operations     | `http://localhost:8080/operations/postal`    |
+| Customer postal       | `http://localhost:8080/postal`               |
+| Platform status       | `http://localhost:8080/platform`             |
+| REST base             | `http://localhost:8080/api/v1`               |
+| Swagger UI            | `http://localhost:8080/api/docs`             |
+| API readiness         | `http://localhost:8080/api/v1/health/ready`  |
+| Mailpit               | `http://localhost:8025`                      |
+| MinIO console         | `http://localhost:9001`                      |
 
 Mailpit, MinIO, MySQL, and Redis host ports are supplied by
 `compose.dev.yaml`. The production topology keeps data services internal.
@@ -123,10 +152,16 @@ The seed is idempotent and currently creates:
 - User: `admin@demo.logicommerce.local`
 - Local-only password: `ChangeMe-Local-Only-2026`
 - Role: `tenant-admin`
-- Permissions: `tenant.configure`, `identity.roles.manage`,
-  `identity.users.manage`, `identity.credentials.manage`, `store.manage`,
-  `catalog.submit`, `catalog.approve`, `offer.manage`, `inventory.manage`,
-  `cart.use`, `order.manage`, and `purchase-order.manage`
+- Role: `tenant-admin`, with the complete seeded administration and domain
+  permission set defined in `packages/database/prisma/seed.ts`
+- Role: `driver-coordinator`, restricted to
+  `transport.dispatch.read`, `transport.assignment.manage`,
+  `transport.checkin.write`, and `transport.exception.manage`
+- Roles: `hub-operator`, `postal-operator`, and `insurance-adjuster`, each
+  restricted to its international operational duties
+- Rotterdam and Singapore international locations and gateway hubs, a demo
+  ICC-A-style multimodal cargo-insurance product, and a demo postal operator
+  and product
 - Storefront: `demo-store`, with a category, attribute, approved product,
   active offer, promotion, and on-hand inventory
 - Isolation tenant ID: `00000000-0000-4000-8000-000000000009`
@@ -175,9 +210,15 @@ The Phase 1 append-only identity migration adds:
 - HMAC-hashed single-use recovery codes;
 - HMAC-hashed, scoped, expirable, and revocable machine credentials.
 
-The schema now includes the tested catalog and B2C order core, but not a
-complete WMS, TMS, returns, or finance model. Expand it through new committed
-migrations; do not rewrite shared migrations.
+Later append-only migrations add the tested WMS/TMS, C2C, B2B, partner,
+returns/finance, 3PL–5PL, operability, freight, dispatch, canonical billing,
+international consignment/document/customs, cargo insurance, handling,
+consolidation/linehaul, and postal models. Published quotes, issued documents,
+milestones, custody scans, postal events, claim events, check-ins, payment
+receipts, finance journals, audit events, and outbox history are evidence
+records; correct them through explicit transitions, supersession, or
+compensation rather than rewriting history. Continue to use new committed
+migrations.
 
 ### Shared packages
 
@@ -229,6 +270,35 @@ migrations; do not rewrite shared migrations.
   order splits, dropship purchase orders, supplier acceptance, and customer and
   operations order views.
 
+### Tested logistics and marketplace boundary
+
+- ASN receiving, inspection, putaway, fulfillment, pick/pack, shipment,
+  normalized tracking, and delivery.
+- Distinct C2C onboarding, listing, negotiation, buyer-protection, dispute,
+  payout, and review policy.
+- B2B accounts, contract prices, RFQ/quote approval, terms, partial
+  fulfillment, and canonical invoice issuance.
+- Scoped Shop credentials, idempotent orders, signed webhooks, retry,
+  dead-letter, and replay evidence.
+- Returns, balanced finance, settlements, 3PL billing, human-approved 4PL
+  rerouting, and reproducible governed 5PL recommendations.
+
+### Tested freight, billing, and coordination boundary
+
+- Global road, sea, air, and rail requests with stops, cargo, documents,
+  estimates, reviewed immutable quote revisions, booking, and ordered legs.
+- Internal and subcontracted carrier/driver/vehicle dispatch for road legs,
+  encrypted driver phones, manual check-ins, overdue exceptions, and proof of
+  delivery.
+- A chronological customer booking timeline backed by transport milestones.
+  It is not continuous GPS and is not yet a unified
+  quote/payment/travel/exception lifecycle feed.
+- Canonical invoices and payment schedules, invoice PDF access, hosted Stripe
+  and Coinbase adapters, signed idempotent webhooks, allocations, refunds,
+  credit notes, and balanced provider-clearing journals.
+- Functional customer, freight operations, dispatch, billing, and analytical
+  dashboard workspaces.
+
 ## Architecture invariants
 
 Preserve these unless an accepted ADR changes them:
@@ -273,10 +343,11 @@ Preserve these unless an accepted ADR changes them:
 
 ## Exact next release slice: authorized production evidence
 
-Phases 8–11 passed their repository-level verification on 2026-07-23.
-Migration `202607230005_phase8_phase11_platform`, seed, repository gates,
-production images, the Phase 8–11 live journey, Phases 1–7 regressions, browser
-matrix, tenant isolation, Compose health, and the 25-VU load gate passed.
+Phases 0–12 have repository-level automated evidence. Phase 12 migration
+`20260728055751_phase12_transport_billing`, repeated seed, package gates,
+production images, the local request-to-POD live journey, prior-phase
+regressions, 12 desktop/mobile browser scenarios, tenant/permission isolation,
+and provider signature/replay unit tests passed.
 
 The next slice is provider and release evidence: run the CI security/container
 scan and SBOM job in an authorized environment, produce measured
@@ -284,12 +355,13 @@ domain-critical coverage, commission an external penetration test, select
 production telemetry/secrets/backup/orchestration providers, and execute a real
 provider backup/restore drill against the documented RPO/RTO.
 
-The implementation adds reverse logistics and immutable finance; multi-client
-3PL billing and human-approved 4PL rerouting; frozen, reproducible 5PL
-recommendations with outcome measurement and rollback; and Phase 11
-operability, recovery, privacy, ingress, scanning, SBOM, and runbook controls.
-Do not mutate posted inventory, finance, audit, tracking, optimization, or
-webhook history; use explicit transitions and compensating records.
+Also certify Stripe and Coinbase in provider sandboxes with deployment keys,
+public webhook reachability, expiry/duplicate/refund/reconciliation drills, and
+the tenant legal entity accepted by each provider. Production SMTP, active
+malware scanning, provider-session reconciliation polling, and any future GPS
+provider are separate implementation slices. Do not mutate posted inventory,
+finance, audit, tracking, optimization, quote, payment-event, or webhook
+history; use explicit transitions and compensating records.
 
 ADRs still required as their decisions become active: Redis queue semantics,
 object-storage upload/security model, tenant isolation enforcement, Shop API
@@ -330,9 +402,10 @@ retention, C2C buyer protection, B2B credit policy, contracted warehouse and
 carrier integrations, secrets manager, observability vendor, or production
 orchestration target. Track these in [open-decisions.md](../open-decisions.md).
 
-The final product journeys A–I are preserved in
-[acceptance-scenarios.md](../product/acceptance-scenarios.md). They are future
-acceptance criteria, not current test results.
+Product journeys A–J are preserved in
+[acceptance-scenarios.md](../product/acceptance-scenarios.md). Repository-level
+components and focused journeys have passed, but production-provider and
+cross-domain end-to-end certification remain explicitly scoped there.
 
 ## Handoff checklist
 

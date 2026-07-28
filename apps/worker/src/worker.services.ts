@@ -237,8 +237,83 @@ export class TransportOperationsSweeper implements OnModuleInit, OnApplicationSh
       },
       data: { status: 'OVERDUE', version: { increment: 1 } },
     });
+    await this.database.cargoInsuranceQuote.updateMany({
+      where: { status: 'QUOTED', validUntil: { lt: now } },
+      data: { status: 'EXPIRED', version: { increment: 1 } },
+    });
+    await this.database.cargoInsurancePolicy.updateMany({
+      where: { status: { in: ['AWAITING_PAYMENT', 'ACTIVE'] }, coverageEndAt: { lt: now } },
+      data: { status: 'EXPIRED', version: { increment: 1 } },
+    });
+    const overdueConsolidations = await this.database.consolidationPlan.findMany({
+      where: { status: { in: ['DRAFT', 'OPEN'] }, cutoffAt: { lte: now } },
+      take: 100,
+    });
+    for (const plan of overdueConsolidations) {
+      const subject = `consolidation-plan/${plan.id}`;
+      const existing = await this.database.outboxEvent.findFirst({
+        where: {
+          tenantId: plan.tenantId,
+          type: 'consolidation.cutoff.missed.v1',
+          subject,
+        },
+      });
+      if (existing) continue;
+      await this.database.outboxEvent.create({
+        data: {
+          id: randomUUID(),
+          tenantId: plan.tenantId,
+          type: 'consolidation.cutoff.missed.v1',
+          subject,
+          payload: {
+            planId: plan.id,
+            planNumber: plan.number,
+            cutoffAt: plan.cutoffAt.toISOString(),
+          },
+          correlationId: randomUUID(),
+        },
+      });
+    }
+    const delayedPostalDispatches = await this.database.postalDispatch.findMany({
+      where: {
+        status: 'OPEN',
+        scheduledDepartureAt: { lt: now },
+      },
+      take: 100,
+    });
+    for (const dispatch of delayedPostalDispatches) {
+      const subject = `postal-dispatch/${dispatch.id}`;
+      const existing = await this.database.outboxEvent.findFirst({
+        where: {
+          tenantId: dispatch.tenantId,
+          type: 'postal.dispatch.handover-overdue.v1',
+          subject,
+        },
+      });
+      if (existing) continue;
+      await this.database.outboxEvent.create({
+        data: {
+          id: randomUUID(),
+          tenantId: dispatch.tenantId,
+          type: 'postal.dispatch.handover-overdue.v1',
+          subject,
+          payload: {
+            dispatchId: dispatch.id,
+            dispatchIdentifier: dispatch.dispatchId,
+            scheduledDepartureAt: dispatch.scheduledDepartureAt?.toISOString(),
+          },
+          correlationId: randomUUID(),
+        },
+      });
+    }
     if (overdue.length > 0) {
       logger.warn({ count: overdue.length }, 'Overdue transport check-ins opened as exceptions');
+    }
+    if (delayedPostalDispatches.length > 0) {
+      logger.warn(
+        { count: delayedPostalDispatches.length },
+        'Postal dispatch handovers are past schedule',
+      );
     }
   }
 }
