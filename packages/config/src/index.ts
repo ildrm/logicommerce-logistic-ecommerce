@@ -62,6 +62,7 @@ const baseEnvironmentSchema = z.object({
   SMTP_USER: optionalText(),
   SMTP_PASSWORD: optionalSecret(8),
   SMTP_FROM: z.string().email().default('no-reply@logicommerce.local'),
+  PARTNER_WEBHOOK_ADAPTER: z.enum(['deterministic', 'http']).default('deterministic'),
   PARTNER_WEBHOOK_ALLOWED_HOSTS: z.string().default(''),
   PARTNER_WEBHOOK_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
   PROVIDER_HTTP_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(10_000),
@@ -205,6 +206,13 @@ export const environmentSchema = baseEnvironmentSchema.superRefine((environment,
       code: 'custom',
       path: ['S3_PUBLIC_ENDPOINT'],
       message: 'must use https in production',
+    });
+  }
+  if (environment.PARTNER_WEBHOOK_ADAPTER !== 'http') {
+    issue.addIssue({
+      code: 'custom',
+      path: ['PARTNER_WEBHOOK_ADAPTER'],
+      message: 'must use the HTTP transport in production',
     });
   }
   if (!environment.PARTNER_WEBHOOK_ALLOWED_HOSTS.trim()) {

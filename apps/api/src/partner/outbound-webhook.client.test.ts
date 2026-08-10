@@ -7,7 +7,11 @@ const request = vi.hoisted(() => vi.fn());
 vi.mock('node:dns/promises', () => ({ lookup }));
 vi.mock('node:https', () => ({ request }));
 
-import { OutboundWebhookClient } from './outbound-webhook.client.js';
+import {
+  DeterministicOutboundWebhookClient,
+  HttpOutboundWebhookClient,
+  createOutboundWebhookClient,
+} from './outbound-webhook.client.js';
 
 const originalEnvironment = { ...process.env };
 
@@ -47,6 +51,7 @@ describe('OutboundWebhookClient', () => {
       SMTP_USER: 'mailer',
       SMTP_PASSWORD: 'smtp-password-production',
       SMTP_FROM: 'no-reply@example.com',
+      PARTNER_WEBHOOK_ADAPTER: 'http',
       PARTNER_WEBHOOK_ALLOWED_HOSTS: '*.example.com',
     });
     lookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
@@ -84,7 +89,7 @@ describe('OutboundWebhookClient', () => {
 
   it('pins the validated public address into the HTTPS request lookup', async () => {
     await expect(
-      new OutboundWebhookClient().deliver({
+      new HttpOutboundWebhookClient().deliver({
         url: 'https://hooks.example.com/events',
         eventId: 'event-1',
         eventType: 'order.created',
@@ -113,8 +118,31 @@ describe('OutboundWebhookClient', () => {
     ]);
 
     await expect(
-      new OutboundWebhookClient().validateDestination('https://hooks.example.com/events'),
+      new HttpOutboundWebhookClient().validateDestination('https://hooks.example.com/events'),
     ).rejects.toThrow('Webhook endpoint resolves to a prohibited network');
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('uses a network-free deterministic transport outside production', async () => {
+    process.env.NODE_ENV = 'test';
+    process.env.PARTNER_WEBHOOK_ADAPTER = 'deterministic';
+    const client = createOutboundWebhookClient();
+
+    expect(client).toBeInstanceOf(DeterministicOutboundWebhookClient);
+    await expect(client.validateDestination('https://shop-hooks.local/orders')).resolves.toBe(
+      undefined,
+    );
+    await expect(
+      client.deliver({
+        url: 'https://shop-hooks.local/orders',
+        eventId: 'event-1',
+        eventType: 'order.created',
+        timestamp: new Date().toISOString(),
+        signature: 'sha256=test',
+        body: '{}',
+      }),
+    ).resolves.toBe(202);
+    expect(lookup).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
   });
 });

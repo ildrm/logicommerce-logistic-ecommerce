@@ -41,6 +41,17 @@ async function json(response, status) {
   return response.json();
 }
 
+async function waitFor(getValue, accept, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  let value;
+  do {
+    value = await getValue();
+    if (accept(value)) return value;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } while (Date.now() < deadline);
+  assert.fail(`Timed out waiting for expected state: ${JSON.stringify(value)}`);
+}
+
 function partnerApi(path, secret, init = {}) {
   return fetch(`${applicationUrl}/api/v1${path}`, {
     ...init,
@@ -401,15 +412,26 @@ async function phase7(adminToken, suffix) {
     }),
     201,
   );
-  const processed = await json(
+  await json(
     await api('/partners/webhook-deliveries/process', adminToken, { method: 'POST' }),
     201,
   );
-  assert.ok(processed.processed >= 2);
-  const deliveries = await json(await api('/partners/webhook-deliveries', adminToken), 200);
-  const delivery = deliveries.find(({ endpointId }) => endpointId === endpoint.id);
-  assert.equal(delivery.status, 'DELIVERED');
-  assert.match(delivery.signature, /^[0-9a-f]{64}$/u);
+  const deliveries = await waitFor(
+    async () => json(await api('/partners/webhook-deliveries', adminToken), 200),
+    (items) => {
+      const matching = items.filter(({ endpointId }) => endpointId === endpoint.id);
+      return matching.length === 2 && matching.every(({ status }) => status === 'DELIVERED');
+    },
+  );
+  const matchingDeliveries = deliveries.filter(({ endpointId }) => endpointId === endpoint.id);
+  assert.deepEqual(
+    new Set(matchingDeliveries.map(({ eventType }) => eventType)),
+    new Set(['shop.order.accepted.v1', 'shop.order.fulfilled.v1']),
+  );
+  for (const delivery of matchingDeliveries) {
+    assert.equal(delivery.lastStatusCode, 202);
+    assert.match(delivery.signature, /^[0-9a-f]{64}$/u);
+  }
 
   const inboundPayload = { status: 'acknowledged', orderId: first.id };
   const body = JSON.stringify(inboundPayload);

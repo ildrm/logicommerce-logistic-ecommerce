@@ -58,6 +58,7 @@ services:
       SMTP_USER: ${SMTP_USER:?Set SMTP_USER for production}
       SMTP_PASSWORD: ${SMTP_PASSWORD:?Set SMTP_PASSWORD for production}
       SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM for production}
+      PARTNER_WEBHOOK_ADAPTER: ${PARTNER_WEBHOOK_ADAPTER:?Set PARTNER_WEBHOOK_ADAPTER for production}
       PARTNER_WEBHOOK_ALLOWED_HOSTS: ${PARTNER_WEBHOOK_ALLOWED_HOSTS:?Set PARTNER_WEBHOOK_ALLOWED_HOSTS for production}
     deploy:
       resources:
@@ -100,6 +101,7 @@ services:
       SMTP_USER: ${SMTP_USER:?Set SMTP_USER for production}
       SMTP_PASSWORD: ${SMTP_PASSWORD:?Set SMTP_PASSWORD for production}
       SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM for production}
+      PARTNER_WEBHOOK_ADAPTER: ${PARTNER_WEBHOOK_ADAPTER:?Set PARTNER_WEBHOOK_ADAPTER for production}
       PARTNER_WEBHOOK_ALLOWED_HOSTS: ${PARTNER_WEBHOOK_ALLOWED_HOSTS:?Set PARTNER_WEBHOOK_ALLOWED_HOSTS for production}
     deploy:
       resources:

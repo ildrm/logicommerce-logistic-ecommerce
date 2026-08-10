@@ -57,6 +57,8 @@ the relay certificate, and fails delivery if encryption cannot be negotiated.
 
 ## Partner webhook destinations
 
+`PARTNER_WEBHOOK_ADAPTER=deterministic` is reserved for development and integration
+tests. Production requires `PARTNER_WEBHOOK_ADAPTER=http`.
 `PARTNER_WEBHOOK_ALLOWED_HOSTS` is a comma-separated exact/wildcard hostname
 allowlist. Wildcards must be used only for organization-controlled, non-delegated
 subdomains. DNS is resolved once, prohibited networks are rejected, and the

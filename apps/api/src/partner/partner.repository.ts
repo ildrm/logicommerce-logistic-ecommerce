@@ -16,7 +16,7 @@ import type {
   SubmitShopOrderDto,
 } from './partner.dto.js';
 import type { PartnerPrincipal } from './partner-auth.guard.js';
-import { OutboundWebhookClient } from './outbound-webhook.client.js';
+import { OUTBOUND_WEBHOOK, type OutboundWebhookPort } from './outbound-webhook.client.js';
 import { WebhookCryptoService } from './webhook-crypto.service.js';
 
 @Injectable()
@@ -25,7 +25,7 @@ export class PartnerRepository {
     @Inject(DATABASE) private readonly db: DatabaseClient,
     private readonly identity: IdentityService,
     private readonly crypto: WebhookCryptoService,
-    private readonly outbound: OutboundWebhookClient,
+    @Inject(OUTBOUND_WEBHOOK) private readonly outbound: OutboundWebhookPort,
   ) {}
 
   credentials(context: TenantContext): Promise<unknown> {

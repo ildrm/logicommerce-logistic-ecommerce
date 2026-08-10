@@ -8,7 +8,7 @@ import {
   ShopApiController,
 } from './partner.controller.js';
 import { PartnerRepository } from './partner.repository.js';
-import { OutboundWebhookClient } from './outbound-webhook.client.js';
+import { OUTBOUND_WEBHOOK, createOutboundWebhookClient } from './outbound-webhook.client.js';
 import { PartnerDeliveryScheduler } from './partner-delivery.scheduler.js';
 import { WebhookCryptoService } from './webhook-crypto.service.js';
 
@@ -19,7 +19,7 @@ import { WebhookCryptoService } from './webhook-crypto.service.js';
     PartnerRepository,
     PartnerAuthGuard,
     WebhookCryptoService,
-    OutboundWebhookClient,
+    { provide: OUTBOUND_WEBHOOK, useFactory: createOutboundWebhookClient },
     PartnerDeliveryScheduler,
   ],
 })

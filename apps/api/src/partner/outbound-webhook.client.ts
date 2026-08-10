@@ -1,14 +1,38 @@
 import { lookup } from 'node:dns/promises';
 import { request } from 'node:https';
 import { isIP } from 'node:net';
-import { BadGatewayException, Injectable } from '@nestjs/common';
+import { BadGatewayException } from '@nestjs/common';
 import { parseEnvironment } from '@logicommerce/config';
+
+export const OUTBOUND_WEBHOOK = Symbol('OUTBOUND_WEBHOOK');
+
+export type OutboundWebhookInput = {
+  url: string;
+  eventId: string;
+  eventType: string;
+  timestamp: string;
+  signature: string;
+  body: string;
+};
+
+export interface OutboundWebhookPort {
+  validateDestination(value: string): Promise<void>;
+  deliver(input: OutboundWebhookInput): Promise<number>;
+}
 
 type PinnedDestination = {
   url: URL;
   address: string;
   family: 4 | 6;
 };
+
+function parseDestination(value: string): URL {
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new BadGatewayException('Webhook endpoint must be an HTTPS URL without credentials');
+  }
+  return url;
+}
 
 function isPrivateAddress(address: string): boolean {
   const normalized = address.toLowerCase();
@@ -46,30 +70,35 @@ function isPrivateAddress(address: string): boolean {
   );
 }
 
-@Injectable()
-export class OutboundWebhookClient {
+export class DeterministicOutboundWebhookClient implements OutboundWebhookPort {
+  validateDestination(value: string): Promise<void> {
+    parseDestination(value);
+    return Promise.resolve();
+  }
+
+  async deliver(input: OutboundWebhookInput): Promise<number> {
+    await this.validateDestination(input.url);
+    return 202;
+  }
+}
+
+export class HttpOutboundWebhookClient implements OutboundWebhookPort {
   private readonly environment = parseEnvironment(process.env);
   private readonly allowedHosts = this.environment.PARTNER_WEBHOOK_ALLOWED_HOSTS.split(',')
     .map((host) => host.trim().toLowerCase())
     .filter(Boolean);
 
-  async deliver(input: {
-    url: string;
-    eventId: string;
-    eventType: string;
-    timestamp: string;
-    signature: string;
-    body: string;
-  }): Promise<number> {
-    const destination = await this.validateDestination(input.url);
+  async deliver(input: OutboundWebhookInput): Promise<number> {
+    const destination = await this.resolveDestination(input.url);
     return this.postPinned(destination, input);
   }
 
-  async validateDestination(value: string): Promise<PinnedDestination> {
-    const url = new URL(value);
-    if (url.protocol !== 'https:' || url.username || url.password) {
-      throw new BadGatewayException('Webhook endpoint must be an HTTPS URL without credentials');
-    }
+  async validateDestination(value: string): Promise<void> {
+    await this.resolveDestination(value);
+  }
+
+  private async resolveDestination(value: string): Promise<PinnedDestination> {
+    const url = parseDestination(value);
     const hostname = url.hostname.toLowerCase().replace(/\.$/u, '');
     if (this.environment.NODE_ENV === 'production' && !this.hostAllowed(hostname)) {
       throw new BadGatewayException('Webhook endpoint host is not allowlisted');
@@ -90,16 +119,7 @@ export class OutboundWebhookClient {
     return { url, address: selected.address, family: selected.family };
   }
 
-  private postPinned(
-    destination: PinnedDestination,
-    input: {
-      eventId: string;
-      eventType: string;
-      timestamp: string;
-      signature: string;
-      body: string;
-    },
-  ): Promise<number> {
+  private postPinned(destination: PinnedDestination, input: OutboundWebhookInput): Promise<number> {
     return new Promise((resolve, reject) => {
       const requestBody = Buffer.from(input.body);
       const outbound = request(
@@ -155,4 +175,11 @@ export class OutboundWebhookClient {
         : hostname === allowed,
     );
   }
+}
+
+export function createOutboundWebhookClient(): OutboundWebhookPort {
+  const environment = parseEnvironment(process.env);
+  return environment.PARTNER_WEBHOOK_ADAPTER === 'http'
+    ? new HttpOutboundWebhookClient()
+    : new DeterministicOutboundWebhookClient();
 }

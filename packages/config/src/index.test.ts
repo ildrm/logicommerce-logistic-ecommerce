@@ -43,6 +43,7 @@ const production = {
   SMTP_USER: 'mailer',
   SMTP_PASSWORD: 'smtp-password-production',
   SMTP_FROM: 'no-reply@example.com',
+  PARTNER_WEBHOOK_ADAPTER: 'http',
   PARTNER_WEBHOOK_ALLOWED_HOSTS: 'hooks.example.com',
 } satisfies NodeJS.ProcessEnv;
 
@@ -76,6 +77,15 @@ describe('parseEnvironment', () => {
         COOKIE_SECURE: 'false',
       }),
     ).toThrow('COMMERCE_ADAPTER');
+  });
+
+  it('rejects the deterministic webhook transport in production', () => {
+    expect(() =>
+      parseEnvironment({
+        ...production,
+        PARTNER_WEBHOOK_ADAPTER: 'deterministic',
+      }),
+    ).toThrow('PARTNER_WEBHOOK_ADAPTER');
   });
 
   it('accepts a complete fail-closed production configuration', () => {
