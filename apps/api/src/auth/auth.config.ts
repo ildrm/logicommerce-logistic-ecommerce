@@ -9,6 +9,7 @@ export type AuthOptions = {
   readonly cookieDomain?: string;
   readonly loginRateLimitMax: number;
   readonly refreshRateLimitMax: number;
+  readonly recoveryRateLimitMax: number;
   readonly rateLimitWindowSeconds: number;
 };
 
@@ -24,6 +25,7 @@ export function loadAuthOptions(): AuthOptions {
     cookieSecure: environment.COOKIE_SECURE,
     loginRateLimitMax: environment.AUTH_LOGIN_RATE_LIMIT_MAX,
     refreshRateLimitMax: environment.AUTH_REFRESH_RATE_LIMIT_MAX,
+    recoveryRateLimitMax: environment.AUTH_RECOVERY_RATE_LIMIT_MAX,
     rateLimitWindowSeconds: environment.AUTH_RATE_LIMIT_WINDOW_SECONDS,
     ...(environment.COOKIE_DOMAIN ? { cookieDomain: environment.COOKIE_DOMAIN } : {}),
   };

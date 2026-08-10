@@ -53,6 +53,7 @@ describe('AuthService', () => {
       cookieSecure: false,
       loginRateLimitMax: 10,
       refreshRateLimitMax: 30,
+      recoveryRateLimitMax: 5,
       rateLimitWindowSeconds: 60,
     });
     service = new AuthService(store, passwords, tokens, {

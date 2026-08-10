@@ -12,7 +12,12 @@ async function signIn(page: import('@playwright/test').Page) {
 }
 
 test('home and platform expose product and runtime state', async ({ page }) => {
-  await page.goto('/');
+  const response = await page.goto('/');
+  const headers = response?.headers() ?? {};
+  expect(headers['content-security-policy']).toContain("default-src 'self'");
+  expect(headers['content-security-policy']).toContain("frame-ancestors 'none'");
+  expect(headers['content-security-policy']).toContain("object-src 'none'");
+  expect(headers['x-content-type-options']).toBe('nosniff');
   await expect(page.getByRole('heading', { name: /one network/i })).toBeVisible();
   await page.getByRole('link', { name: 'Platform' }).click();
   await expect(page.getByRole('heading', { name: 'Platform health' })).toBeVisible();

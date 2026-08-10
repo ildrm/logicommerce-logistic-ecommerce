@@ -1,0 +1,12 @@
+aws_region         = "eu-west-1"
+environment        = "production"
+domain_name        = "app.example.com"
+certificate_arn    = "arn:aws:acm:eu-west-1:123456789012:certificate/replace-me"
+image_tag          = "0000000000000000000000000000000000000000"
+alarm_topic_arn    = "arn:aws:sns:eu-west-1:123456789012:logicommerce-production-on-call"
+availability_zones = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
+
+tags = {
+  Owner      = "platform"
+  CostCenter = "logicommerce"
+}

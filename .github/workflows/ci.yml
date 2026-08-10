@@ -24,23 +24,72 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:coverage
+      - run: pnpm test:coverage:critical
+      - run: pnpm test:release-evidence
       - uses: actions/upload-artifact@v4
         with:
           name: api-coverage
-          path: apps/api/coverage/coverage-summary.json
+          path: |
+            apps/api/coverage/coverage-summary.json
+            apps/api/coverage-critical/coverage-summary.json
       - run: pnpm audit --prod --audit-level high
       - run: pnpm build
       - run: docker compose -f compose.yaml -f compose.dev.yaml config --quiet
       - run: docker compose --env-file infrastructure/production.env.example -f compose.yaml -f compose.prod.yaml config --quiet
+
+  infrastructure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with: { tofu_version: 1.10.6 }
+      - name: Check OpenTofu formatting
+        working-directory: infrastructure/aws/production
+        run: tofu fmt -check -recursive
+      - name: Initialize OpenTofu providers
+        working-directory: infrastructure/aws/production
+        run: tofu init -backend=false
+      - name: Validate OpenTofu
+        working-directory: infrastructure/aws/production
+        run: tofu validate
 
   containers:
     runs-on: ubuntu-latest
     needs: validate
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f Dockerfile.web .
-      - run: docker build -f Dockerfile.api .
-      - run: docker build -f Dockerfile.worker .
+      - run: docker build -f Dockerfile.web -t logicommerce-web:${{ github.sha }} .
+      - run: docker build -f Dockerfile.api -t logicommerce-api:${{ github.sha }} .
+      - run: docker build -f Dockerfile.migrate -t logicommerce-migrate:${{ github.sha }} .
+      - run: docker build -f Dockerfile.worker -t logicommerce-worker:${{ github.sha }} .
+      - name: Scan web image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: logicommerce-web:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+      - name: Scan API image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: logicommerce-api:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+      - name: Scan migration image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: logicommerce-migrate:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+      - name: Scan worker image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: logicommerce-worker:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
 
   phase-integration:
     runs-on: ubuntu-latest

@@ -78,4 +78,35 @@ describe('DocumentScannerService', () => {
       }),
     ).resolves.toMatchObject({ clean: true, reference: 'scan-2', checksum });
   });
+
+  it('uses the network-free deterministic scanner outside production', async () => {
+    process.env.DOCUMENT_SCANNER_ADAPTER = 'deterministic';
+    delete process.env.DOCUMENT_SCANNER_URL;
+    delete process.env.DOCUMENT_SCANNER_TOKEN;
+    const storage = { presignGet: vi.fn() };
+
+    await expect(
+      new DocumentScannerService(storage as never).scan({
+        objectKey: 'tenant/verified/document',
+        contentType: 'application/pdf',
+        sizeBytes: 1_024,
+        checksum,
+      }),
+    ).resolves.toEqual({ clean: true, reference: `local-scan:${checksum}`, checksum });
+    expect(storage.presignGet).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the HTTP scanner configuration is incomplete', async () => {
+    delete process.env.DOCUMENT_SCANNER_TOKEN;
+    const scanner = new DocumentScannerService({ presignGet: vi.fn() } as never);
+
+    await expect(
+      scanner.scan({
+        objectKey: 'tenant/verified/document',
+        contentType: 'application/pdf',
+        sizeBytes: 1_024,
+        checksum,
+      }),
+    ).rejects.toThrow('The HTTP document scanner is not completely configured');
+  });
 });

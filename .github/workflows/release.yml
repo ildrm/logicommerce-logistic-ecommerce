@@ -1,0 +1,171 @@
+name: Production release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full 40-character commit SHA from a green CI run
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY to authorize the protected production job
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: logicommerce-production
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Validate release input
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "$CONFIRMATION" = DEPLOY
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          printf '%s' "$RELEASE_SHA" | grep -Eq '^[a-f0-9]{40}$'
+      - run: node release/check-evidence.mjs
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with: { version: 11.15.1, run_install: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:coverage:critical
+      - run: docker compose --env-file infrastructure/production.env.example -f compose.yaml -f compose.prod.yaml config --quiet
+
+  deploy:
+    needs: preflight
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_ROOT: infrastructure/aws/production
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_domain_name: ${{ vars.PRODUCTION_DOMAIN }}
+      TF_VAR_certificate_arn: ${{ vars.PRODUCTION_CERTIFICATE_ARN }}
+      TF_VAR_alarm_topic_arn: ${{ vars.PRODUCTION_ALARM_TOPIC_ARN }}
+      TF_VAR_image_tag: ${{ inputs.release_sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: ${{ vars.AWS_RELEASE_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with: { tofu_version: 1.10.6 }
+      - name: Initialize OpenTofu
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          tofu init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+      - name: Ensure immutable image repositories
+        working-directory: ${{ env.TF_ROOT }}
+        run: tofu apply -auto-approve -target=aws_ecr_repository.application
+      - name: Build immutable release images
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          registry="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          docker build -f Dockerfile.web -t "$registry/logicommerce/web:$RELEASE_SHA" .
+          docker build -f Dockerfile.api -t "$registry/logicommerce/api:$RELEASE_SHA" .
+          docker build -f Dockerfile.worker -t "$registry/logicommerce/worker:$RELEASE_SHA" .
+          docker build -f Dockerfile.migrate -t "$registry/logicommerce/migrate:$RELEASE_SHA" .
+      - name: Scan web release image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/logicommerce/web:${{ inputs.release_sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+      - name: Scan API release image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/logicommerce/api:${{ inputs.release_sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+      - name: Scan worker release image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/logicommerce/worker:${{ inputs.release_sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+      - name: Scan migration release image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/logicommerce/migrate:${{ inputs.release_sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+      - name: Push release images
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          registry="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          for image in web api worker migrate; do
+            docker push "$registry/logicommerce/$image:$RELEASE_SHA"
+          done
+      - name: Preview release plan
+        working-directory: ${{ env.TF_ROOT }}
+        run: tofu plan
+      - name: Register migration task definition
+        working-directory: ${{ env.TF_ROOT }}
+        run: tofu apply -auto-approve -target=aws_ecs_task_definition.migrate
+      - name: Apply forward database migrations
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          cluster="$(tofu output -raw ecs_cluster_name)"
+          task_definition="$(tofu output -raw migration_task_definition_arn)"
+          subnets="$(tofu output -json private_subnet_ids | jq -r 'join(",")')"
+          security_group="$(tofu output -raw application_security_group_id)"
+          task_arn="$(aws ecs run-task \
+            --cluster "$cluster" \
+            --task-definition "$task_definition" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$subnets],securityGroups=[$security_group],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' --output text)"
+          test "$task_arn" != None
+          aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task_arn"
+          test "$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" --query 'tasks[0].containers[0].exitCode' --output text)" = 0
+      - name: Apply application release
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          tofu plan -out=tfplan
+          tofu apply -auto-approve tfplan
+      - name: Wait for stable services
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          cluster="$(tofu output -raw ecs_cluster_name)"
+          services="$(tofu output -json ecs_service_names | jq -r '.[]')"
+          aws ecs wait services-stable --cluster "$cluster" --services $services
+      - name: Verify production health
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          PRODUCTION_DOMAIN: ${{ vars.PRODUCTION_DOMAIN }}
+        run: |
+          load_balancer="$(tofu output -raw load_balancer_dns_name)"
+          curl --fail --show-error --silent --retry 12 --retry-all-errors \
+            --retry-delay 10 \
+            --connect-to "$PRODUCTION_DOMAIN:443:$load_balancer:443" \
+            "https://$PRODUCTION_DOMAIN/api/v1/health/ready"

@@ -152,6 +152,12 @@ export class AuthController {
   @ApiBearerAuth()
   async requestEmailVerification(@Req() request: AuthenticatedRequest) {
     const user = await this.auth.me(this.principal(request));
+    await this.rateLimits.assertRecoveryAllowed(
+      this.contexts.get(),
+      user.email,
+      request.ip,
+      'EMAIL_VERIFICATION',
+    );
     return this.recovery.request(this.contexts.get(), user.email, 'EMAIL_VERIFICATION');
   }
 
@@ -162,7 +168,13 @@ export class AuthController {
   }
 
   @Post('password-reset/request')
-  requestPasswordReset(@Body() input: EmailRequestDto) {
+  async requestPasswordReset(@Body() input: EmailRequestDto, @Req() request: FastifyRequest) {
+    await this.rateLimits.assertRecoveryAllowed(
+      this.contexts.get(),
+      input.email,
+      request.ip,
+      'PASSWORD_RESET',
+    );
     return this.recovery.request(this.contexts.get(), input.email, 'PASSWORD_RESET');
   }
 
@@ -173,7 +185,13 @@ export class AuthController {
   }
 
   @Post('passwordless/request')
-  requestPasswordless(@Body() input: EmailRequestDto) {
+  async requestPasswordless(@Body() input: EmailRequestDto, @Req() request: FastifyRequest) {
+    await this.rateLimits.assertRecoveryAllowed(
+      this.contexts.get(),
+      input.email,
+      request.ip,
+      'PASSWORDLESS_LOGIN',
+    );
     return this.recovery.request(this.contexts.get(), input.email, 'PASSWORDLESS_LOGIN');
   }
 

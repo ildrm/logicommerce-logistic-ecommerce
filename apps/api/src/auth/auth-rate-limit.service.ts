@@ -40,6 +40,22 @@ export class AuthRateLimitService {
     );
   }
 
+  async assertRecoveryAllowed(
+    context: TenantContext,
+    email: string,
+    ip: string,
+    purpose: 'EMAIL_VERIFICATION' | 'PASSWORD_RESET' | 'PASSWORDLESS_LOGIN',
+  ): Promise<void> {
+    await this.consume(
+      `auth:recovery:${purpose}:account:${this.hash(`${context.tenantId}:${email.trim().toLowerCase()}`)}`,
+      this.options.recoveryRateLimitMax,
+    );
+    await this.consume(
+      `auth:recovery:${purpose}:ip:${this.hash(`${context.tenantId}:${ip}`)}`,
+      this.options.recoveryRateLimitMax,
+    );
+  }
+
   private async consume(key: string, maximum: number): Promise<void> {
     let count: number;
     try {

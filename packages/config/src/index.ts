@@ -26,6 +26,7 @@ const baseEnvironmentSchema = z.object({
   COOKIE_DOMAIN: z.string().min(1).optional(),
   AUTH_LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   AUTH_REFRESH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(30),
+  AUTH_RECOVERY_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
   PUBLIC_BASE_URL: z.string().url().default('http://localhost:8080'),
   PAYMENT_ADAPTER: z.enum(['mock', 'stripe', 'coinbase', 'multi']).default('mock'),

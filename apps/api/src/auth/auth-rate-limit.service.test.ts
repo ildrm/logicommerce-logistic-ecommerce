@@ -11,6 +11,7 @@ const options = {
   cookieSecure: false,
   loginRateLimitMax: 10,
   refreshRateLimitMax: 30,
+  recoveryRateLimitMax: 5,
   rateLimitWindowSeconds: 60,
 };
 const context = { tenantId: 'tenant-a', actorId: null, correlationId: 'request-a' };
@@ -39,6 +40,36 @@ describe('AuthRateLimitService', () => {
     await expect(
       service.assertLoginAllowed(context, 'admin@example.com', '192.0.2.1'),
     ).rejects.toMatchObject({ status: 429 });
+  });
+
+  it('rate-limits recovery requests with a privacy-preserving tenant scope', async () => {
+    const evaluate = vi
+      .fn<
+        (script: string, keyCount: number, key: string, windowSeconds: number) => Promise<number>
+      >()
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(6);
+    const service = new AuthRateLimitService({ eval: evaluate } as unknown as Redis, options);
+
+    await service.assertRecoveryAllowed(
+      context,
+      'Admin@Example.com',
+      '192.0.2.1',
+      'PASSWORD_RESET',
+    );
+    await expect(
+      service.assertRecoveryAllowed(context, 'admin@example.com', '192.0.2.1', 'PASSWORD_RESET'),
+    ).rejects.toMatchObject({ status: 429 });
+
+    const accountKey = evaluate.mock.calls[0]?.[2];
+    const ipKey = evaluate.mock.calls[1]?.[2];
+    expect(accountKey).toMatch(/^auth:recovery:PASSWORD_RESET:account:[a-f0-9]{64}$/u);
+    expect(ipKey).toMatch(/^auth:recovery:PASSWORD_RESET:ip:[a-f0-9]{64}$/u);
+    expect(String(accountKey)).not.toContain('example.com');
+    expect(String(accountKey)).not.toContain('tenant-a');
+    expect(String(ipKey)).not.toContain('tenant-a');
+    expect(String(ipKey)).not.toContain('192.0.2.1');
   });
 
   it('fails closed when Redis is unavailable', async () => {

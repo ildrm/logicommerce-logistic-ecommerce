@@ -15,6 +15,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:coverage": "pnpm --filter @logicommerce/api exec vitest run src --coverage.enabled --coverage.provider=v8 --coverage.reporter=text --coverage.reporter=json-summary --coverage.reportsDirectory=coverage --coverage.include=src/**/*.ts --coverage.thresholds.lines=10 --coverage.thresholds.statements=9 --coverage.thresholds.branches=8 --coverage.thresholds.functions=7",
+    "test:coverage:critical": "node tests/coverage/run-domain-critical.mjs",
+    "test:release-evidence": "node --test release/check-evidence.test.mjs",
     "test:e2e": "playwright test",
     "test:auth:live": "node tests/e2e/authentication-live.mjs",
     "test:commerce:live": "node tests/e2e/commerce-live.mjs",

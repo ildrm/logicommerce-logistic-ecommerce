@@ -78,6 +78,7 @@ export class FreightRepository {
         booking: true,
       },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
   }
 

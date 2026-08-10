@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "release": "v0.1.0-rc.1",
+  "gates": {
+    "providerSandboxCertification": {
+      "status": "pending",
+      "evidenceUri": "",
+      "verifiedAt": "",
+      "expiresAt": ""
+    },
+    "penetrationTest": {
+      "status": "pending",
+      "evidenceUri": "",
+      "verifiedAt": "",
+      "expiresAt": ""
+    },
+    "privacyAndRegulatoryReview": {
+      "status": "pending",
+      "evidenceUri": "",
+      "verifiedAt": "",
+      "expiresAt": ""
+    },
+    "databaseAndObjectRestoreDrill": {
+      "status": "pending",
+      "evidenceUri": "",
+      "verifiedAt": "",
+      "expiresAt": ""
+    },
+    "productionTelemetryAndOnCall": {
+      "status": "pending",
+      "evidenceUri": "",
+      "verifiedAt": "",
+      "expiresAt": ""
+    },
+    "stagingAcceptance": {
+      "status": "pending",
+      "evidenceUri": "",
+      "verifiedAt": "",
+      "expiresAt": ""
+    },
+    "migrationAndRollbackReview": {
+      "status": "pending",
+      "evidenceUri": "",
+      "verifiedAt": "",
+      "expiresAt": ""
+    }
+  }
+}

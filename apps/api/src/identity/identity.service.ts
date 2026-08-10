@@ -96,6 +96,7 @@ export class IdentityService {
     return this.database.user.findMany({
       where: { tenantId: context.tenantId },
       orderBy: { email: 'asc' },
+      take: 100,
       select: {
         id: true,
         email: true,

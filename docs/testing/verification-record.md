@@ -3,6 +3,34 @@
 This file records commands that actually ran. It is not a substitute for CI and
 must be updated with new evidence when behavior changes.
 
+## Production release automation — 2026-08-10
+
+### Local verification
+
+| Gate                       | Result  | Evidence summary                                                                      |
+| -------------------------- | ------- | ------------------------------------------------------------------------------------- |
+| API unit suite             | Passed  | 15 files, 41 tests                                                                    |
+| Whole-API coverage         | Passed  | 10.81% lines, 10.06% statements, 8.99% branches, 8.19% functions                      |
+| Release evidence validator | Passed  | 2/2 positive and fail-closed tests                                                    |
+| Critical-control coverage  | Passed  | 97.67% lines, 87.09% branches, 100% functions                                         |
+| Changed-scope lint         | Passed  | Authentication, freight, identity, web, and config sources                            |
+| API/web type checks        | Passed  | Strict TypeScript checks completed                                                    |
+| API production build       | Passed  | Nest production compilation completed                                                 |
+| Web production build       | Passed  | Next.js built 18 static routes                                                        |
+| Production images          | Partial | Web, worker, and migration passed; final API compiled, then local cache export failed |
+| Migration image runtime    | Passed  | Prisma 7.9.0 CLI and schema loaded as the non-root image user                         |
+| Compose rendering          | Passed  | Development and production overlays rendered successfully                             |
+| Infrastructure validation  | Passed  | OpenTofu 1.10.6 initialized AWS provider 6.58.0 and validated the configuration       |
+| Fresh live stack           | Pending | Docker Hub's signed CloudFront blob downloads returned HTTP 403 twice locally         |
+
+The evidence file intentionally remains pending. Local success does not replace
+provider sandbox certification, a penetration/privacy review, a measured
+database and object restore drill, production telemetry/on-call ownership,
+staging acceptance, or migration/rollback approval. The protected release
+workflow rejects deployment until current HTTPS evidence exists for every gate.
+The clean hosted CI container and integration jobs are authoritative for the two
+local Docker infrastructure limitations above.
+
 ## Production release hardening — 2026-08-10
 
 ### Environment

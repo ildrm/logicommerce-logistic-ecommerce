@@ -9,6 +9,7 @@ const options = {
   cookieSecure: true,
   loginRateLimitMax: 10,
   refreshRateLimitMax: 30,
+  recoveryRateLimitMax: 5,
   rateLimitWindowSeconds: 60,
 };
 

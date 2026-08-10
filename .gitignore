@@ -4,6 +4,9 @@ node_modules/
 .next/
 dist/
 coverage/
+coverage-critical/
+!tests/coverage/
+!tests/coverage/**
 .env
 .env.local
 *.log
@@ -11,3 +14,7 @@ coverage/
 packages/database/generated/
 playwright-report/
 test-results/
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan

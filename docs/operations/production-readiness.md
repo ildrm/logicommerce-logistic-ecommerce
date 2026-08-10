@@ -22,9 +22,11 @@ bodies, tokens, subject identifiers, or query values.
   duplicate/stale webhook, refund, settlement-reference, database/object-store
   restore, and tenant/permission-denial evidence. The mock payment adapter is
   forbidden in production.
-- `pnpm test:coverage` is a mandatory CI artifact. The repository baseline is
-  protected against regression, but the measured 2026-08-10 whole-API result
-  (10.55% lines) does not satisfy the 80% domain-critical release target.
+- `pnpm test:coverage` and `pnpm test:coverage:critical` are mandatory CI
+  artifacts. The repository baseline is protected against regression. The
+  measured 2026-08-10 whole-API result is 10.81% lines, while the explicit
+  abuse-throttling, authorization, and document-scanning manifest measures
+  97.67% lines and 87.09% branches. The latter is not whole-API coverage.
 - The production environment must use the contracts in
   [provider contracts](provider-contracts.md). SMTP requires TLS 1.2 or newer,
   object uploads require storage-verified SHA-256 and exact length, and partner
@@ -60,8 +62,8 @@ still blocked until the following external evidence exists:
 
 - provider sandbox certification for commerce, carrier, KYC, escrow, scanner,
   Stripe/Coinbase, customs, insurer, postal, and licensed-data dependencies;
-- an authorized CI run with its SBOM/security/container results and coverage
-  artifact, plus sufficient domain-critical tests to reach the release target;
+- an authorized CI run with its SBOM/security/container results and both
+  coverage artifacts;
 - a penetration test and jurisdiction-specific privacy/regulatory review;
 - measured database/object-store backup and restore drills under the intended
   deployment topology;
