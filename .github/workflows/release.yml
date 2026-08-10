@@ -96,6 +96,7 @@ jobs:
           image-ref: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/logicommerce/web:${{ inputs.release_sha }}
           severity: CRITICAL,HIGH
           exit-code: '1'
+          trivyignores: .trivyignore.yaml
       - name: Scan API release image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -103,6 +104,7 @@ jobs:
           image-ref: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/logicommerce/api:${{ inputs.release_sha }}
           severity: CRITICAL,HIGH
           exit-code: '1'
+          trivyignores: .trivyignore.yaml
       - name: Scan worker release image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -110,6 +112,7 @@ jobs:
           image-ref: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/logicommerce/worker:${{ inputs.release_sha }}
           severity: CRITICAL,HIGH
           exit-code: '1'
+          trivyignores: .trivyignore.yaml
       - name: Scan migration release image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -117,6 +120,7 @@ jobs:
           image-ref: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/logicommerce/migrate:${{ inputs.release_sha }}
           severity: CRITICAL,HIGH
           exit-code: '1'
+          trivyignores: .trivyignore.yaml
       - name: Push release images
         env:
           AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}

@@ -1,0 +1,8 @@
+vulnerabilities:
+  - id: CVE-2026-12151
+    statement: >-
+      Node.js 24.19.0 is the current upstream LTS release and embeds undici 6.26.0.
+      LogiCommerce exposes no WebSocket endpoint, so the affected unbounded
+      WebSocket receive path is not reachable. Upgrade to the first Node.js 24
+      release embedding undici 6.27.0 or later.
+    expired_at: 2026-09-03
