@@ -6,6 +6,7 @@ import { RequirePermissions } from '../auth/require-permissions.decorator.js';
 import { TenantContextService } from '../tenancy/tenant-context.service.js';
 import {
   AcceptBusinessQuoteDto,
+  AddSellerMemberDto,
   AddBusinessMemberDto,
   ContractPriceDto,
   CreateBusinessAccountDto,
@@ -45,6 +46,11 @@ export class B2BController {
   price(@Param('id', new ParseUUIDPipe()) id: string, @Body() input: ContractPriceDto) {
     return this.repo.contractPrice(this.contexts.get(), id, input);
   }
+  @Post('sellers/:id/members')
+  @RequirePermissions('b2b.manage')
+  addSellerMember(@Param('id', new ParseUUIDPipe()) id: string, @Body() input: AddSellerMemberDto) {
+    return this.repo.addSellerMember(this.contexts.get(), id, input);
+  }
   @Get('accounts/:id/contract-prices')
   @RequirePermissions('b2b.buy')
   prices(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: AuthenticatedRequest) {
@@ -52,8 +58,8 @@ export class B2BController {
   }
   @Get('rfqs')
   @RequirePermissions('b2b.sell')
-  rfqs() {
-    return this.repo.rfqs(this.contexts.get());
+  rfqs(@Req() req: AuthenticatedRequest) {
+    return this.repo.rfqs(this.contexts.get(), this.principal(req));
   }
   @Post('accounts/:id/rfqs')
   @RequirePermissions('b2b.buy')
@@ -66,8 +72,12 @@ export class B2BController {
   }
   @Post('rfqs/:id/quotes')
   @RequirePermissions('b2b.sell')
-  quote(@Param('id', new ParseUUIDPipe()) id: string, @Body() input: CreateBusinessQuoteDto) {
-    return this.repo.quote(this.contexts.get(), id, input);
+  quote(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: CreateBusinessQuoteDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.repo.quote(this.contexts.get(), this.principal(req), id, input);
   }
   @Post('quotes/:id/accept')
   @RequirePermissions('b2b.buy')
@@ -85,8 +95,12 @@ export class B2BController {
   }
   @Post('orders/:id/fulfill')
   @RequirePermissions('b2b.sell')
-  fulfill(@Param('id', new ParseUUIDPipe()) id: string, @Body() input: FulfillBusinessOrderDto) {
-    return this.repo.fulfill(this.contexts.get(), id, input);
+  fulfill(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() input: FulfillBusinessOrderDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.repo.fulfill(this.contexts.get(), this.principal(req), id, input);
   }
   @Get('orders')
   @RequirePermissions('b2b.manage')

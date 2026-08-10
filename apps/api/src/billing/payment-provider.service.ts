@@ -1,4 +1,10 @@
-import { createHmac, randomBytes, randomUUID, sign as cryptoSign } from 'node:crypto';
+import {
+  createHmac,
+  randomBytes,
+  randomUUID,
+  sign as cryptoSign,
+  timingSafeEqual,
+} from 'node:crypto';
 import {
   BadGatewayException,
   BadRequestException,
@@ -6,6 +12,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { parseEnvironment } from '@logicommerce/config';
+import { boundedJson } from '../platform/bounded-http.js';
 
 type SessionInput = {
   provider: 'STRIPE' | 'COINBASE' | 'MOCK';
@@ -60,6 +67,7 @@ export class PaymentProviderService {
     providerReference: string;
     amountMinor: number;
     reason: string;
+    idempotencyKey: string;
   }) {
     if (input.provider === 'MOCK') {
       return { reference: `mockrefund_${randomUUID()}`, status: 'COMPLETED' };
@@ -67,14 +75,13 @@ export class PaymentProviderService {
     if (input.provider === 'STRIPE') {
       const key = this.environment.STRIPE_SECRET_KEY;
       if (!key) throw new ServiceUnavailableException('Stripe is not configured');
-      const sessionResponse = await fetch(
+      const { response: sessionResponse, body: session } = await this.requestJson<{
+        payment_intent?: string;
+        error?: unknown;
+      }>(
         `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(input.providerReference)}`,
         { headers: { authorization: `Bearer ${key}` } },
       );
-      const session = (await sessionResponse.json()) as {
-        payment_intent?: string;
-        error?: unknown;
-      };
       if (!sessionResponse.ok || !session.payment_intent) {
         throw new BadGatewayException('Stripe payment could not be resolved');
       }
@@ -83,15 +90,18 @@ export class PaymentProviderService {
         amount: String(input.amountMinor),
         reason: 'requested_by_customer',
       });
-      const response = await fetch('https://api.stripe.com/v1/refunds', {
+      const { response, body: result } = await this.requestJson<{
+        id?: string;
+        status?: string;
+      }>('https://api.stripe.com/v1/refunds', {
         method: 'POST',
         headers: {
           authorization: `Bearer ${key}`,
           'content-type': 'application/x-www-form-urlencoded',
+          'idempotency-key': input.idempotencyKey,
         },
         body: form,
       });
-      const result = (await response.json()) as { id?: string; status?: string };
       if (!response.ok || !result.id) throw new BadGatewayException('Stripe refund failed');
       return {
         reference: result.id,
@@ -99,11 +109,15 @@ export class PaymentProviderService {
       };
     }
     const token = this.coinbaseJwt('POST', `/api/v1/checkouts/${input.providerReference}/refunds`);
-    const response = await fetch(
+    const { response, body: result } = await this.requestJson<{ id?: string; status?: string }>(
       `https://business.coinbase.com/api/v1/checkouts/${encodeURIComponent(input.providerReference)}/refunds`,
       {
         method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'x-idempotency-key': input.idempotencyKey,
+        },
         body: JSON.stringify({
           amount: (input.amountMinor / 100).toFixed(2),
           currency: 'USDC',
@@ -111,7 +125,6 @@ export class PaymentProviderService {
         }),
       },
     );
-    const result = (await response.json()) as { id?: string; status?: string };
     if (!response.ok || !result.id) throw new BadGatewayException('Coinbase refund failed');
     return {
       reference: result.id,
@@ -126,7 +139,7 @@ export class PaymentProviderService {
     const timestamp = Number(parts.t);
     if (!timestamp || Math.abs(Date.now() / 1000 - timestamp) > 300) return false;
     const expected = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
-    return parts.v1 === expected;
+    return this.safeEqual(parts.v1, expected);
   }
 
   verifyCoinbase(body: string, signature: string, headers: Record<string, string>) {
@@ -145,8 +158,8 @@ export class PaymentProviderService {
       `${timestamp}.${body}`,
       `${timestamp}.${values.h ?? ''}.${signedHeaderValues}.${body}`,
     ];
-    return candidates.some(
-      (candidate) => createHmac('sha256', secret).update(candidate).digest('hex') === values.v1,
+    return candidates.some((candidate) =>
+      this.safeEqual(createHmac('sha256', secret).update(candidate).digest('hex'), values.v1),
     );
   }
 
@@ -169,7 +182,11 @@ export class PaymentProviderService {
       'line_items[0][price_data][unit_amount]': String(input.amountMinor),
       'line_items[0][price_data][product_data][name]': `Invoice ${input.invoiceNumber}`,
     });
-    const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    const { response, body: result } = await this.requestJson<{
+      id?: string;
+      url?: string;
+      expires_at?: number;
+    }>('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
         authorization: `Bearer ${key}`,
@@ -178,7 +195,6 @@ export class PaymentProviderService {
       },
       body: form,
     });
-    const result = (await response.json()) as { id?: string; url?: string; expires_at?: number };
     if (!response.ok || !result.id || !result.url) {
       throw new BadGatewayException('Stripe checkout session creation failed');
     }
@@ -197,7 +213,11 @@ export class PaymentProviderService {
     }
     const path = '/api/v1/checkouts';
     const token = this.coinbaseJwt('POST', path);
-    const response = await fetch(`https://business.coinbase.com${path}`, {
+    const { response, body: result } = await this.requestJson<{
+      id?: string;
+      url?: string;
+      expiresAt?: string;
+    }>(`https://business.coinbase.com${path}`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,
@@ -214,7 +234,6 @@ export class PaymentProviderService {
         expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
       }),
     });
-    const result = (await response.json()) as { id?: string; url?: string; expiresAt?: string };
     if (!response.ok || !result.id || !result.url) {
       throw new BadGatewayException('Coinbase checkout session creation failed');
     }
@@ -250,5 +269,19 @@ export class PaymentProviderService {
       dsaEncoding: 'ieee-p1363',
     }).toString('base64url');
     return `${unsigned}.${signature}`;
+  }
+
+  private async requestJson<T>(url: string, init: RequestInit) {
+    return boundedJson<T>(url, init, {
+      timeoutMs: this.environment.PROVIDER_HTTP_TIMEOUT_MS,
+      maxResponseBytes: this.environment.PROVIDER_HTTP_MAX_RESPONSE_BYTES,
+    });
+  }
+
+  private safeEqual(left: string | undefined, right: string | undefined) {
+    if (!left || !right) return false;
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
   }
 }

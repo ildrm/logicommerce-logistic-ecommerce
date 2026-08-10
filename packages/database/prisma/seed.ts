@@ -633,6 +633,18 @@ async function seed() {
     update: {},
     create: { id: sellerId, tenantId, key: 'demo-merchant', name: 'Demo Merchant' },
   });
+  await database.sellerMember.upsert({
+    where: {
+      tenantId_sellerId_userId: { tenantId, sellerId, userId },
+    },
+    update: {},
+    create: {
+      id: '00000000-0000-4000-8000-000000000419',
+      tenantId,
+      sellerId,
+      userId,
+    },
+  });
 
   await database.product.upsert({
     where: { tenantId_storeId_slug: { tenantId, storeId, slug: 'modular-field-kit' } },

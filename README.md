@@ -4,10 +4,11 @@ LogiCommerce is a multi-tenant commerce and logistics platform for C2C, B2C,
 B2B, dropshipping, and 1PL–5PL operating models. The repository starts as a
 modular monolith with separately runnable web, API, and worker processes.
 
-> **Current state:** Phases 0–12 have repository-level automated evidence.
-> This includes global multimodal freight, canonical invoicing, hosted-payment
-> adapters, and manual driver coordination. Production provider activation and
-> external release evidence remain deployment work. New contributors should begin with the
+> **Current state:** Phases 0–13 are implemented with repository-level automated
+> evidence. Production builds now fail closed unless external commerce, carrier,
+> identity-verification, C2C escrow, malware-scanning, payment, SMTP, and webhook
+> controls are configured. Provider activation and external release evidence remain
+> deployment work. New contributors should begin with the
 > [continuation guide](docs/development/continuation-guide.md).
 
 ## Quick start
@@ -60,7 +61,8 @@ pnpm install --frozen-lockfile
 pnpm db:generate
 pnpm lint
 pnpm typecheck
-pnpm test
+    pnpm test
+    pnpm test:coverage
 pnpm build
 pnpm test:network:live
 pnpm test:phase12:live
@@ -75,7 +77,7 @@ the current documentation review boundary.
 
 ## Continue implementation
 
-Phases 0–12 have repository-level automated evidence. Phase 13 adds the
+Phases 0–13 have repository-level automated evidence. Phase 13 adds the
 international logistics structure required for consignments, transport and
 customs documents, cargo insurance/claims, hubs and consolidation, physical
 handling units, shared linehaul, and postal exchange. Preserve the tested
@@ -101,10 +103,11 @@ disposition. The [international standards map](docs/logistics/international-stan
 explains alignment and the external certification boundary.
 
 Stripe Checkout and Coinbase Business Checkout adapters are implemented but
-are inactive without deployment secrets and sandbox certification. The
-synchronous mock is local/test-only and production startup rejects it. Tax,
-identity-verification, and carrier integrations remain adapter boundaries until
-credentials and contracts are selected.
+are inactive without deployment secrets and sandbox certification. Local mock
+and deterministic adapters are development/test-only; production startup rejects
+them. Commerce, carrier, identity-verification, C2C escrow, document-scanner, and
+SMTP adapters have production HTTP/SMTP implementations and still require
+contracted providers, credentials, sandbox certification, and deployment evidence.
 
 The [verification record](docs/testing/verification-record.md) contains the
 commands and live checks that passed at the foundation handoff. Update it only

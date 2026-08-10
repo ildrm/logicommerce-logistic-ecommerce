@@ -93,6 +93,21 @@ export class FreightController {
     return this.freight.registerDocument(this.contexts.get(), this.principal(request), id, input);
   }
 
+  @Post('requests/:id/documents/:documentId/complete')
+  @RequirePermissions('transport.request.use')
+  completeDocument(
+    @Req() request: AuthenticatedRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('documentId', new ParseUUIDPipe()) documentId: string,
+  ) {
+    return this.freight.completeDocument(
+      this.contexts.get(),
+      this.principal(request),
+      id,
+      documentId,
+    );
+  }
+
   @Get('quotes/:id')
   @RequirePermissions('transport.request.use')
   quote(@Req() request: AuthenticatedRequest, @Param('id', new ParseUUIDPipe()) id: string) {

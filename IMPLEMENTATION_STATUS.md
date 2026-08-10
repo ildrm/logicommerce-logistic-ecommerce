@@ -1,6 +1,6 @@
 # Implementation status
 
-Last evidence update: **2026-07-28**. See the
+Last evidence update: **2026-08-10**. See the
 [verification record](docs/testing/verification-record.md) for commands and
 runtime results, and the
 [continuation guide](docs/development/continuation-guide.md) for the exact next
@@ -27,16 +27,45 @@ Status values: `NOT_STARTED`, `IN_PROGRESS`, `BLOCKED`, `IMPLEMENTED`, `TESTED`,
 
 ## Current focus
 
-Phases 0–13 have repository-level automated evidence. The next release work is
-deployment-provider activation and authorized release evidence: licensed
-international code lists and identifiers, insurer/customs/postal/carrier
-agreements and adapters, Stripe and Coinbase sandbox certification, CI
-security/SBOM, measured domain-critical coverage, external penetration
-testing, jurisdictional review, and an actual provider backup/restore drill.
-Production SMTP delivery, active object malware scanning, provider-session
-reconciliation polling, tenant-level freight feature flags, continuous GPS,
-and external conformance certification remain unimplemented integration or
-release work and must not be inferred from internal models.
+Phases 0–13 are implemented at repository scope. The production release
+hardening adds real external commerce, carrier, identity-verification, C2C
+escrow, document-scanner, SMTP, payment, and partner-webhook paths; development
+adapters fail closed in production. It also adds seller-scoped B2B access,
+non-destructive MFA enrollment, durable refunds/outbox/webhook processing,
+checksum-and-length-bound staged uploads, durable C2C hold release, provider
+HTTP limits, frontend token refresh, and production CI/Compose gates.
+
+The repository is a **release candidate**, not an approved production release.
+The measured whole-API coverage baseline is 10.55% lines, below the 80%
+domain-critical release target. Provider sandbox certification, licensed data
+and agreements, external penetration and regulatory review, backup/restore
+drills, secrets/telemetry/on-call integration, and an authorized green CI run
+remain release evidence. Continuous GPS and tenant-level freight feature-flag
+policy remain explicit product/deployment decisions.
+
+## Production release hardening — 2026-08-10
+
+- Production configuration rejects repository placeholders, weak or reused
+  secrets, insecure origins/cookies, missing webhook allowlists, and every
+  local mock, preview, or deterministic provider adapter.
+- Commerce and carrier provider calls are authenticated, bounded, non-redirecting,
+  and idempotent where state changes. Stripe/Coinbase webhook and refund paths
+  retain durable deduplication and retry semantics.
+- C2C KYC and escrow use external providers. Countered, rejected, and expired
+  offers transactionally enqueue idempotent payment-hold releases, which a
+  leased scheduler retries until acknowledgement.
+- SMTP requires TLS 1.2 or newer and validated certificates. Partner webhooks
+  resolve and validate public addresses once, pin the chosen address into the
+  HTTPS connection, bound responses, retry with leases, and dead-letter.
+- Freight uploads stage under generated keys, sign exact content type/length and
+  S3-verified SHA-256, delete mismatches, require a scanner digest attestation,
+  and expose only CLEAN proof-of-delivery documents.
+- CI now validates formatting, lint, types, unit suites, an uploaded API coverage
+  summary, production dependency audit, builds, Compose rendering, containers,
+  all live phase journeys, browser journeys, Trivy source scanning, and SBOM.
+- The sealed production-hardening security diff review closed 56/56 review rows.
+  Its five findings were remediated with focused regression coverage before the
+  final repository gates.
 
 ## Freight travel and event timeline
 

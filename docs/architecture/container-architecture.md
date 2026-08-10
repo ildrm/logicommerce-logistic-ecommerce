@@ -14,11 +14,15 @@ flowchart LR
   API --> Redis
   API --> MinIO
   API --> PaymentProviders[Stripe / Coinbase]
+  API --> CommerceProviders[Commerce / Carrier / KYC / Escrow]
+  API --> Scanner[Document scanner]
+  API --> SMTP[SMTP relay]
+  API --> PartnerEndpoints[Partner webhooks]
   Worker --> MySQL
   Worker --> Redis
   Worker --> MinIO
   Migrate --> MySQL
-  API --> Mailpit
+  API -. local only .-> Mailpit
 ```
 
 `compose.yaml` defines the secure core topology. `compose.dev.yaml` exposes
@@ -28,6 +32,9 @@ production orchestrator. Secrets, TLS termination, backups, scheduling,
 autoscaling, and multi-host recovery remain deployment decisions.
 
 `PAYMENT_ADAPTER=mock` is permitted only in development and test; API startup
-fails in production when it is selected. Mailpit is a local inspection service,
-not evidence of a production SMTP integration. MinIO provides the local
-S3-compatible boundary for freight documents and proof of delivery.
+fails in production when it is selected. The same fail-closed rule applies to
+preview/deterministic commerce, carrier, KYC, C2C escrow, scanner, and mail
+adapters. Mailpit remains local-only; production uses authenticated mandatory-TLS
+SMTP. MinIO provides the local S3-compatible boundary for freight documents and
+proof of delivery, while production requires HTTPS public object access and a
+scanner that attests the storage-verified digest.

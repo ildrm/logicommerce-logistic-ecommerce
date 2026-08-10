@@ -159,7 +159,8 @@ export class CheckoutDto {
   promotionCode?: string;
 
   @IsString()
-  @Matches(/^tok_[A-Za-z0-9_-]{8,120}$/u)
+  @MinLength(8)
+  @MaxLength(256)
   paymentToken!: string;
 
   @ValidateNested()

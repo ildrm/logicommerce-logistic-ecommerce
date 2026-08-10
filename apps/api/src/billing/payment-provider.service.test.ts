@@ -44,9 +44,7 @@ describe('PaymentProviderService', () => {
 
   it('fails startup when mock payments are enabled in production', () => {
     configure({ NODE_ENV: 'production', PAYMENT_ADAPTER: 'mock' });
-    expect(() => new PaymentProviderService()).toThrow(
-      'PAYMENT_ADAPTER=mock is forbidden in production',
-    );
+    expect(() => new PaymentProviderService()).toThrow(/PAYMENT_ADAPTER: mock is forbidden/u);
   });
 
   it('verifies Stripe signatures and rejects stale or replay-shaped signatures', () => {

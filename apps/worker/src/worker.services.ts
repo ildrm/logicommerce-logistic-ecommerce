@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { writeFile, unlink } from 'node:fs/promises';
 import { Inject, Injectable, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import type { DatabaseClient } from '@logicommerce/database';
+import { parseEnvironment } from '@logicommerce/config';
 import { createLogger } from '@logicommerce/observability';
+import { Queue } from 'bullmq';
 
 const logger = createLogger('worker');
 export const DATABASE = Symbol('DATABASE');
@@ -10,8 +12,22 @@ export const DATABASE = Symbol('DATABASE');
 @Injectable()
 export class OutboxPublisher implements OnModuleInit, OnApplicationShutdown {
   private timer: NodeJS.Timeout | undefined;
+  private readonly queue: Queue;
 
-  constructor(@Inject(DATABASE) private readonly database: DatabaseClient) {}
+  constructor(@Inject(DATABASE) private readonly database: DatabaseClient) {
+    const environment = parseEnvironment(process.env);
+    const redis = new URL(environment.REDIS_URL);
+    this.queue = new Queue(environment.OUTBOX_QUEUE_NAME, {
+      connection: {
+        host: redis.hostname,
+        port: Number(redis.port || 6379),
+        ...(redis.username ? { username: redis.username } : {}),
+        ...(redis.password ? { password: redis.password } : {}),
+        db: redis.pathname.length > 1 ? Number(redis.pathname.slice(1)) : 0,
+        maxRetriesPerRequest: null,
+      },
+    });
+  }
 
   onModuleInit() {
     this.timer = setInterval(() => {
@@ -19,28 +35,84 @@ export class OutboxPublisher implements OnModuleInit, OnApplicationShutdown {
         logger.error({ err: error }, 'Outbox poll failed; retrying');
       });
     }, 2_000);
+    void this.publishBatch();
   }
 
   async onApplicationShutdown() {
     if (this.timer) clearInterval(this.timer);
+    await this.queue.close();
     await this.database.$disconnect();
   }
 
   private async publishBatch() {
+    const now = new Date();
     const events = await this.database.outboxEvent.findMany({
-      where: { status: 'PENDING', availableAt: { lte: new Date() } },
+      where: {
+        status: { in: ['PENDING', 'PROCESSING', 'FAILED'] },
+        availableAt: { lte: now },
+      },
       orderBy: { createdAt: 'asc' },
       take: 20,
     });
     for (const event of events) {
-      logger.info(
-        { eventId: event.id, eventType: event.type, tenantId: event.tenantId },
-        'Outbox event ready',
-      );
-      await this.database.outboxEvent.updateMany({
-        where: { id: event.id, tenantId: event.tenantId, status: 'PENDING' },
-        data: { status: 'PUBLISHED', publishedAt: new Date(), attempts: { increment: 1 } },
+      const claimed = await this.database.outboxEvent.updateMany({
+        where: {
+          id: event.id,
+          tenantId: event.tenantId,
+          status: event.status,
+          availableAt: { lte: now },
+        },
+        data: {
+          status: 'PROCESSING',
+          attempts: { increment: 1 },
+          availableAt: new Date(Date.now() + 60_000),
+          lastErrorCode: null,
+        },
       });
+      if (claimed.count !== 1) continue;
+      try {
+        await this.queue.add(
+          'domain-event',
+          {
+            id: event.id,
+            tenantId: event.tenantId,
+            type: event.type,
+            version: event.eventVersion,
+            subject: event.subject,
+            payload: event.payload,
+            correlationId: event.correlationId,
+            causationId: event.causationId,
+            createdAt: event.createdAt.toISOString(),
+          },
+          {
+            jobId: event.id,
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 1_000 },
+            removeOnComplete: { age: 7 * 24 * 60 * 60, count: 100_000 },
+            removeOnFail: { age: 30 * 24 * 60 * 60 },
+          },
+        );
+        await this.database.outboxEvent.updateMany({
+          where: { id: event.id, tenantId: event.tenantId, status: 'PROCESSING' },
+          data: { status: 'PUBLISHED', publishedAt: new Date() },
+        });
+        logger.info(
+          { eventId: event.id, eventType: event.type, tenantId: event.tenantId },
+          'Outbox event published',
+        );
+      } catch (error) {
+        const attempts = event.attempts + 1;
+        await this.database.outboxEvent.updateMany({
+          where: { id: event.id, tenantId: event.tenantId, status: 'PROCESSING' },
+          data: {
+            status: 'FAILED',
+            availableAt: new Date(Date.now() + Math.min(3_600, 2 ** attempts * 5) * 1_000),
+            lastErrorCode:
+              error instanceof Error ? error.name.slice(0, 120) : 'OUTBOX_PUBLISH_FAILED',
+          },
+        });
+        logger.error({ err: error, eventId: event.id }, 'Outbox publish failed; retrying');
+      }
     }
   }
 }

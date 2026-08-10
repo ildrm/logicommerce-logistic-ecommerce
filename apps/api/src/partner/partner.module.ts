@@ -8,11 +8,19 @@ import {
   ShopApiController,
 } from './partner.controller.js';
 import { PartnerRepository } from './partner.repository.js';
+import { OutboundWebhookClient } from './outbound-webhook.client.js';
+import { PartnerDeliveryScheduler } from './partner-delivery.scheduler.js';
 import { WebhookCryptoService } from './webhook-crypto.service.js';
 
 @Module({
   imports: [TenantContextModule, IdentityModule],
   controllers: [PartnerAdminController, ShopApiController, PartnerWebhookController],
-  providers: [PartnerRepository, PartnerAuthGuard, WebhookCryptoService],
+  providers: [
+    PartnerRepository,
+    PartnerAuthGuard,
+    WebhookCryptoService,
+    OutboundWebhookClient,
+    PartnerDeliveryScheduler,
+  ],
 })
 export class PartnerModule {}

@@ -16,6 +16,7 @@ import type {
   SubmitShopOrderDto,
 } from './partner.dto.js';
 import type { PartnerPrincipal } from './partner-auth.guard.js';
+import { OutboundWebhookClient } from './outbound-webhook.client.js';
 import { WebhookCryptoService } from './webhook-crypto.service.js';
 
 @Injectable()
@@ -24,6 +25,7 @@ export class PartnerRepository {
     @Inject(DATABASE) private readonly db: DatabaseClient,
     private readonly identity: IdentityService,
     private readonly crypto: WebhookCryptoService,
+    private readonly outbound: OutboundWebhookClient,
   ) {}
 
   credentials(context: TenantContext): Promise<unknown> {
@@ -111,6 +113,7 @@ export class PartnerRepository {
 
   async createEndpoint(context: TenantContext, input: CreateWebhookEndpointDto): Promise<unknown> {
     await this.assertPartner(context, input.partnerKind, input.partnerId);
+    await this.outbound.validateDestination(input.url);
     const secret = randomBytes(32).toString('base64url');
     const endpoint = await this.db.webhookEndpoint.create({
       data: {
@@ -144,43 +147,98 @@ export class PartnerRepository {
   }
 
   async processDeliveries(context: TenantContext): Promise<unknown> {
+    const now = new Date();
     const pending = await this.db.webhookDelivery.findMany({
       where: {
         tenantId: context.tenantId,
-        status: { in: ['PENDING', 'RETRYING'] },
-        nextAttemptAt: { lte: new Date() },
+        OR: [
+          { status: { in: ['PENDING', 'RETRYING'] }, nextAttemptAt: { lte: now } },
+          { status: 'PROCESSING', nextAttemptAt: { lte: now } },
+        ],
       },
       include: { endpoint: true },
       take: 100,
     });
+    let processed = 0;
     for (const delivery of pending) {
+      const claimed = await this.db.webhookDelivery.updateMany({
+        where: {
+          id: delivery.id,
+          tenantId: context.tenantId,
+          status: delivery.status,
+          nextAttemptAt: { lte: now },
+        },
+        data: {
+          status: 'PROCESSING',
+          attempts: { increment: 1 },
+          nextAttemptAt: new Date(Date.now() + 60_000),
+          lastError: null,
+        },
+      });
+      if (claimed.count !== 1) continue;
+      processed += 1;
       const secret = this.crypto.decrypt(delivery.endpoint.secretCiphertext);
       const timestamp = Math.floor(Date.now() / 1000).toString();
       const body = JSON.stringify(delivery.payload);
       const signature = this.crypto.sign(secret, timestamp, delivery.eventId, body);
       const attempts = delivery.attempts + 1;
-      const deliverable =
-        delivery.endpoint.status === 'ACTIVE' && delivery.endpoint.url.startsWith('https://');
-      await this.db.webhookDelivery.update({
-        where: { id: delivery.id },
-        data: deliverable
-          ? {
-              status: 'DELIVERED',
-              attempts,
-              signature,
-              lastStatusCode: 202,
-              deliveredAt: new Date(),
-            }
-          : {
-              status: attempts >= 5 ? 'DEAD_LETTER' : 'RETRYING',
-              attempts,
-              signature,
-              lastError: 'Endpoint unavailable',
-              nextAttemptAt: new Date(Date.now() + Math.min(3600, 2 ** attempts * 30) * 1_000),
-            },
-      });
+      try {
+        if (delivery.endpoint.status !== 'ACTIVE') throw new Error('Endpoint is not active');
+        const statusCode = await this.outbound.deliver({
+          url: delivery.endpoint.url,
+          eventId: delivery.eventId,
+          eventType: delivery.eventType,
+          timestamp,
+          signature,
+          body,
+        });
+        if (statusCode < 200 || statusCode >= 300) {
+          throw new Error(`Endpoint returned HTTP ${statusCode}`);
+        }
+        await this.db.webhookDelivery.updateMany({
+          where: { id: delivery.id, tenantId: context.tenantId, status: 'PROCESSING' },
+          data: {
+            status: 'DELIVERED',
+            signature,
+            lastStatusCode: statusCode,
+            deliveredAt: new Date(),
+          },
+        });
+      } catch (error) {
+        const statusMatch = error instanceof Error ? error.message.match(/HTTP (\d{3})/u) : null;
+        await this.db.webhookDelivery.updateMany({
+          where: { id: delivery.id, tenantId: context.tenantId, status: 'PROCESSING' },
+          data: {
+            status: attempts >= 5 ? 'DEAD_LETTER' : 'RETRYING',
+            signature,
+            lastStatusCode: statusMatch ? Number(statusMatch[1]) : null,
+            lastError: error instanceof Error ? error.message.slice(0, 1000) : 'Delivery failed',
+            nextAttemptAt: new Date(Date.now() + Math.min(3600, 2 ** attempts * 30) * 1_000),
+          },
+        });
+      }
     }
-    return { processed: pending.length };
+    return { processed };
+  }
+
+  async processAllDeliveries(): Promise<number> {
+    const tenants = await this.db.webhookDelivery.groupBy({
+      by: ['tenantId'],
+      where: {
+        status: { in: ['PENDING', 'PROCESSING', 'RETRYING'] },
+        nextAttemptAt: { lte: new Date() },
+      },
+    });
+    let processed = 0;
+    for (const { tenantId } of tenants) {
+      const result = (await this.processDeliveries({
+        tenantId,
+        actorId: null,
+        correlationId: randomUUID(),
+      })) as { processed: number };
+      processed += result.processed;
+    }
+    return processed;
   }
 
   async replay(context: TenantContext, id: string): Promise<unknown> {

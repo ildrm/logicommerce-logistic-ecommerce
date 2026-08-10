@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
@@ -67,10 +77,17 @@ export class C2CController {
   @RequirePermissions('c2c.trade')
   offer(
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() input: CreateC2COfferDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.repo.offer(this.contexts.get(), this.principal(req), id, input);
+    return this.repo.offer(
+      this.contexts.get(),
+      this.principal(req),
+      id,
+      idempotencyKey ?? '',
+      input,
+    );
   }
   @Post('offers/:id/accept')
   @RequirePermissions('c2c.trade')

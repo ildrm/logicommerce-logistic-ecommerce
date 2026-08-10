@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -27,6 +28,7 @@ import type {
   UploadDocumentDto,
 } from './freight.dto.js';
 import { ContactCryptoService } from './contact-crypto.service.js';
+import { DocumentScannerService } from './document-scanner.service.js';
 import { StorageSigningService } from './storage-signing.service.js';
 
 const REQUEST_TERMINAL = new Set(['ACCEPTED', 'REJECTED', 'EXPIRED', 'CANCELLED']);
@@ -59,6 +61,7 @@ export class FreightRepository {
     @Inject(DATABASE) private readonly db: DatabaseClient,
     private readonly contacts: ContactCryptoService,
     private readonly storage: StorageSigningService,
+    private readonly scanner: DocumentScannerService,
   ) {}
 
   requests(context: TenantContext, principal: AuthPrincipal, all: boolean) {
@@ -275,7 +278,7 @@ export class FreightRepository {
     }
     const id = randomUUID();
     const safeName = input.fileName.replace(/[^A-Za-z0-9._-]/gu, '_');
-    const objectKey = `${context.tenantId}/freight/${requestId}/${id}-${safeName}`;
+    const objectKey = `${context.tenantId}/freight/${requestId}/staging/${id}-${safeName}`;
     const document = await this.db.freightDocument.create({
       data: {
         id,
@@ -290,15 +293,105 @@ export class FreightRepository {
         uploadedBy: principal.userId,
       },
     });
+    const upload = this.storage.presignPut(
+      objectKey,
+      input.contentType,
+      input.sizeBytes,
+      input.checksum,
+    );
     return {
       document,
       upload: {
         method: 'PUT',
-        url: this.storage.presignPut(objectKey),
-        expiresInSeconds: 900,
-        headers: { 'content-type': input.contentType },
+        url: upload.url,
+        expiresInSeconds: 300,
+        headers: upload.headers,
       },
     };
+  }
+
+  async completeDocument(
+    context: TenantContext,
+    principal: AuthPrincipal,
+    requestId: string,
+    documentId: string,
+  ) {
+    await this.requireOwnedRequest(context, principal, requestId);
+    let document = await this.db.freightDocument.findFirst({
+      where: { id: documentId, tenantId: context.tenantId, requestId },
+    });
+    if (!document) throw new NotFoundException('Resource not found');
+    if (document.scanStatus === 'CLEAN') return document;
+    if (document.scanStatus === 'REJECTED') {
+      throw new ConflictException('Document upload was rejected');
+    }
+
+    if (document.scanStatus === 'QUARANTINED') {
+      try {
+        await this.assertObjectMetadata(document.objectKey, document);
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          await this.rejectUploadedDocument(document.id, document.objectKey, 'metadata_mismatch');
+        }
+        throw error;
+      }
+      const safeName = document.fileName.replace(/[^A-Za-z0-9._-]/gu, '_');
+      const finalKey = `${context.tenantId}/freight/${requestId}/verified/${document.id}-${safeName}`;
+      await this.storage.finalizeUpload(document.objectKey, finalKey);
+      try {
+        await this.assertObjectMetadata(finalKey, document);
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          await this.rejectUploadedDocument(document.id, finalKey, 'final_metadata_mismatch');
+        }
+        throw error;
+      }
+      document = await this.db.freightDocument.update({
+        where: { id: document.id },
+        data: { objectKey: finalKey, scanStatus: 'SCANNING', uploadedAt: new Date() },
+      });
+    }
+
+    const scan = await this.scanner.scan({
+      objectKey: document.objectKey,
+      contentType: document.contentType,
+      sizeBytes: document.sizeBytes,
+      checksum: document.checksum,
+    });
+    if (!scan.clean) {
+      await this.db.freightDocument.update({
+        where: { id: document.id },
+        data: { scanStatus: 'REJECTED', scanReference: scan.reference },
+      });
+      await this.storage.deleteObject(document.objectKey).catch(() => undefined);
+      throw new BadRequestException('Document failed security scanning');
+    }
+    return this.db.freightDocument.update({
+      where: { id: document.id },
+      data: { scanStatus: 'CLEAN', scanReference: scan.reference, verifiedAt: new Date() },
+    });
+  }
+
+  private async assertObjectMetadata(
+    objectKey: string,
+    document: { sizeBytes: number; contentType: string; checksum: string },
+  ) {
+    const metadata = await this.storage.objectMetadata(objectKey);
+    if (
+      metadata.sizeBytes !== document.sizeBytes ||
+      metadata.contentType !== document.contentType ||
+      metadata.checksum.toLowerCase() !== document.checksum.toLowerCase()
+    ) {
+      throw new BadRequestException('Uploaded object metadata does not match the upload intent');
+    }
+  }
+
+  private async rejectUploadedDocument(documentId: string, objectKey: string, reason: string) {
+    await this.storage.deleteObject(objectKey).catch(() => undefined);
+    await this.db.freightDocument.update({
+      where: { id: documentId },
+      data: { scanStatus: 'REJECTED', scanReference: reason },
+    });
   }
 
   rateCards(context: TenantContext) {
@@ -1130,6 +1223,7 @@ export class FreightRepository {
           tenantId: context.tenantId,
           requestId: booking.requestId,
           kind: 'PROOF_OF_DELIVERY',
+          scanStatus: 'CLEAN',
         },
       });
       if (!document) throw new NotFoundException('Proof-of-delivery document not found');

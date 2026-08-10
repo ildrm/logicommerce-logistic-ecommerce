@@ -4,7 +4,7 @@ This is the canonical handoff for the next developer or coding agent. It
 records what was built, what was verified, which constraints are intentional,
 and where implementation must resume.
 
-Last updated: **2026-07-28**.
+Last updated: **2026-08-10**.
 
 ## Current project state
 
@@ -25,9 +25,11 @@ multi-tenant C2C, B2C, B2B, dropshipping, and 1PL–5PL platform.
   `TESTED` locally.
 - The visual control-tower prototype under `mockups/control-tower` is a design
   reference, not the production application.
-- Production provider activation, authorized external security evidence, SMTP,
-  active malware scanning, reconciliation polling, and live GPS are not
-  completed merely because ports or configuration fields exist.
+- Production HTTP/SMTP provider implementations and fail-closed configuration
+  are present. Activation still requires contracted provider credentials,
+  sandbox/conformance evidence, authorized external security and recovery
+  evidence, and the release gates below. Continuous GPS remains a separate
+  product/provider decision.
 
 Always check [IMPLEMENTATION_STATUS.md](../../IMPLEMENTATION_STATUS.md) before
 describing a module as implemented.
@@ -109,11 +111,17 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:coverage
 pnpm build
 pnpm test:e2e
 docker compose -f compose.yaml -f compose.dev.yaml config --quiet
 docker compose -f compose.yaml -f compose.prod.yaml config --quiet
 ```
+
+The whole-API coverage baseline measured on 2026-08-10 is 10.55% lines. CI
+publishes the summary and prevents regression below the recorded baseline, but
+production approval requires targeted domain-critical coverage to reach the
+80% release objective.
 
 If a local Next.js Turbopack build fails only with `binding to a port` and
 `Operation not permitted`, check the execution sandbox. The same build passed

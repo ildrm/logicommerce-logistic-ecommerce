@@ -23,7 +23,7 @@ import { AuthTokenService } from './auth-token.service.js';
 import { AuthService } from './auth.service.js';
 import type { AuthPrincipal } from './auth.types.js';
 import { LoginDto } from './login.dto.js';
-import { MfaCodeDto } from './mfa.dto.js';
+import { MfaCodeDto, MfaEnrollmentDto } from './mfa.dto.js';
 import { MfaService } from './mfa.service.js';
 import {
   ConsumeIdentityTokenDto,
@@ -129,8 +129,8 @@ export class AuthController {
   @Post('mfa/totp/enroll')
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
-  enrollMfa(@Req() request: AuthenticatedRequest) {
-    return this.mfa.enroll(this.contexts.get(), this.principal(request));
+  enrollMfa(@Body() input: MfaEnrollmentDto, @Req() request: AuthenticatedRequest) {
+    return this.mfa.enroll(this.contexts.get(), this.principal(request), input.currentCode);
   }
 
   @Post('mfa/totp/confirm')

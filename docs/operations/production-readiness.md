@@ -22,6 +22,13 @@ bodies, tokens, subject identifiers, or query values.
   duplicate/stale webhook, refund, settlement-reference, database/object-store
   restore, and tenant/permission-denial evidence. The mock payment adapter is
   forbidden in production.
+- `pnpm test:coverage` is a mandatory CI artifact. The repository baseline is
+  protected against regression, but the measured 2026-08-10 whole-API result
+  (10.55% lines) does not satisfy the 80% domain-critical release target.
+- The production environment must use the contracts in
+  [provider contracts](provider-contracts.md). SMTP requires TLS 1.2 or newer,
+  object uploads require storage-verified SHA-256 and exact length, and partner
+  webhook connections must stay pinned to the validated public address.
 
 ## Runtime objectives
 
@@ -46,7 +53,22 @@ Production retention execution must run as a dry-run first and preserve an
 immutable count and digest of affected records.
 
 Driver contacts, optional coordinates, cargo/customs documents, invoice PDFs,
-and POD evidence require explicit retention and access policy. Current gaps
-that block a fully integrated production claim are SMTP invoice delivery,
-active upload malware scanning, automated provider-session reconciliation
-polling, tenant freight feature flags, and continuous GPS.
+and POD evidence require explicit retention and access policy. SMTP submission,
+active upload scanning, provider adapters, durable C2C hold release, webhook
+delivery, and checksum-bound uploads are implemented. Production activation is
+still blocked until the following external evidence exists:
+
+- provider sandbox certification for commerce, carrier, KYC, escrow, scanner,
+  Stripe/Coinbase, customs, insurer, postal, and licensed-data dependencies;
+- an authorized CI run with its SBOM/security/container results and coverage
+  artifact, plus sufficient domain-critical tests to reach the release target;
+- a penetration test and jurisdiction-specific privacy/regulatory review;
+- measured database/object-store backup and restore drills under the intended
+  deployment topology;
+- durable multi-replica telemetry, alerting, secrets-manager integration, and
+  operational ownership/on-call acceptance;
+- explicit product decisions for continuous GPS, tenant freight feature flags,
+  and any provider-session polling not covered by signed webhooks.
+
+The repository is a release candidate, not evidence that those deployment gates
+have passed.

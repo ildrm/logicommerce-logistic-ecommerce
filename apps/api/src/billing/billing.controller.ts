@@ -99,9 +99,16 @@ export class BillingOperationsController {
   refund(
     @Req() request: AuthenticatedRequest,
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() input: RefundPaymentDto,
   ) {
-    return this.billing.refund(this.contexts.get(), this.principal(request), id, input);
+    return this.billing.refund(
+      this.contexts.get(),
+      this.principal(request),
+      id,
+      idempotencyKey ?? '',
+      input,
+    );
   }
 
   @Post('invoices/:id/credit-notes')

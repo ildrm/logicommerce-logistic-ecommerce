@@ -229,7 +229,8 @@ async function phase5(adminToken, viewerToken, suffix) {
   const offer = await json(
     await api(`/c2c/listings/${listing.id}/offers`, viewerToken, {
       method: 'POST',
-      body: JSON.stringify({ amountMinor: 2900 }),
+      headers: { 'idempotency-key': `c2c-offer-${suffix}` },
+      body: JSON.stringify({ amountMinor: 2900, paymentToken: `tok_c2c_${suffix}` }),
     }),
     201,
   );

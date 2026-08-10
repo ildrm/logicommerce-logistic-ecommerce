@@ -171,7 +171,15 @@ enum C2COfferStatus {
   EXPIRED
 }
 
+enum C2CPaymentReleaseStatus {
+  PENDING
+  PROCESSING
+  RETRYING
+  RELEASED
+}
+
 enum C2CTransactionStatus {
+  AWAITING_PAYMENT
   PAYMENT_HELD
   SHIPPED
   DELIVERED
@@ -205,6 +213,7 @@ enum PartnerKind {
 
 enum WebhookDeliveryStatus {
   PENDING
+  PROCESSING
   RETRYING
   DELIVERED
   DEAD_LETTER
@@ -282,6 +291,7 @@ model User {
   carts             Cart[]
   customerAddresses CustomerAddress[]
   orders            Order[]
+  sellerMemberships SellerMember[]
 
   @@unique([tenantId, email])
   @@index([tenantId, isActive])
@@ -305,18 +315,20 @@ model IdentityToken {
 }
 
 model MfaCredential {
-  id               String            @id @db.Char(36)
-  tenantId         String            @db.Char(36)
-  userId           String            @db.Char(36)
-  kind             MfaKind
-  secretCiphertext String            @db.VarChar(512)
-  confirmedAt      DateTime?         @db.DateTime(3)
-  lastUsedStep     BigInt?
-  createdAt        DateTime          @default(now()) @db.DateTime(3)
-  updatedAt        DateTime          @updatedAt @db.DateTime(3)
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  recoveryCodes    MfaRecoveryCode[]
+  id                      String            @id @db.Char(36)
+  tenantId                String            @db.Char(36)
+  userId                  String            @db.Char(36)
+  kind                    MfaKind
+  secretCiphertext        String            @db.VarChar(512)
+  pendingSecretCiphertext String?           @db.VarChar(512)
+  pendingCreatedAt        DateTime?         @db.DateTime(3)
+  confirmedAt             DateTime?         @db.DateTime(3)
+  lastUsedStep            BigInt?
+  createdAt               DateTime          @default(now()) @db.DateTime(3)
+  updatedAt               DateTime          @updatedAt @db.DateTime(3)
+  user                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant                  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recoveryCodes           MfaRecoveryCode[]
 
   @@unique([tenantId, userId, kind])
   @@index([tenantId, confirmedAt])
@@ -570,21 +582,35 @@ model Supplier {
 }
 
 model Seller {
-  id        String        @id @db.Char(36)
-  tenantId  String        @db.Char(36)
-  key       String        @db.VarChar(100)
-  name      String        @db.VarChar(160)
-  status    PartnerStatus @default(ACTIVE)
+  id        String         @id @db.Char(36)
+  tenantId  String         @db.Char(36)
+  key       String         @db.VarChar(100)
+  name      String         @db.VarChar(160)
+  status    PartnerStatus  @default(ACTIVE)
   metadata  Json?
-  version   Int           @default(1)
-  createdAt DateTime      @default(now()) @db.DateTime(3)
-  updatedAt DateTime      @updatedAt @db.DateTime(3)
-  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  version   Int            @default(1)
+  createdAt DateTime       @default(now()) @db.DateTime(3)
+  updatedAt DateTime       @updatedAt @db.DateTime(3)
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   offers    Offer[]
   splits    OrderSplit[]
+  members   SellerMember[]
 
   @@unique([tenantId, key])
   @@index([tenantId, status])
+}
+
+model SellerMember {
+  id        String   @id @db.Char(36)
+  tenantId  String   @db.Char(36)
+  sellerId  String   @db.Char(36)
+  userId    String   @db.Char(36)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, sellerId, userId])
+  @@index([tenantId, userId, sellerId])
 }
 
 model ProductSubmission {
@@ -1317,21 +1343,47 @@ model C2CListing {
 }
 
 model C2COffer {
-  id            String         @id @db.Char(36)
-  tenantId      String         @db.Char(36)
-  listingId     String         @db.Char(36)
-  buyerUserId   String         @db.Char(36)
-  parentOfferId String?        @db.Char(36)
-  amountMinor   BigInt
-  status        C2COfferStatus @default(OPEN)
-  expiresAt     DateTime       @db.DateTime(3)
-  acceptedAt    DateTime?      @db.DateTime(3)
-  createdAt     DateTime       @default(now()) @db.DateTime(3)
-  updatedAt     DateTime       @updatedAt @db.DateTime(3)
-  listing       C2CListing     @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  id                    String         @id @db.Char(36)
+  tenantId              String         @db.Char(36)
+  listingId             String         @db.Char(36)
+  buyerUserId           String         @db.Char(36)
+  parentOfferId         String?        @db.Char(36)
+  amountMinor           BigInt
+  paymentProvider       String         @db.VarChar(40)
+  paymentReference      String         @db.VarChar(240)
+  paymentIdempotencyKey String         @db.VarChar(160)
+  status                C2COfferStatus @default(OPEN)
+  expiresAt             DateTime       @db.DateTime(3)
+  acceptedAt            DateTime?      @db.DateTime(3)
+  createdAt             DateTime       @default(now()) @db.DateTime(3)
+  updatedAt             DateTime       @updatedAt @db.DateTime(3)
+  listing               C2CListing     @relation(fields: [listingId], references: [id], onDelete: Restrict)
 
+  @@unique([tenantId, paymentIdempotencyKey])
+  @@unique([paymentProvider, paymentReference])
   @@index([tenantId, listingId, status])
   @@index([tenantId, buyerUserId, status])
+}
+
+model C2CPaymentRelease {
+  id                    String                  @id @db.Char(36)
+  tenantId              String                  @db.Char(36)
+  offerId               String                  @unique @db.Char(36)
+  paymentProvider       String                  @db.VarChar(40)
+  paymentReference      String                  @db.VarChar(240)
+  paymentIdempotencyKey String                  @db.VarChar(160)
+  status                C2CPaymentReleaseStatus @default(PENDING)
+  attempts              Int                     @default(0)
+  availableAt           DateTime                @default(now()) @db.DateTime(3)
+  lockedUntil           DateTime?               @db.DateTime(3)
+  releasedAt            DateTime?               @db.DateTime(3)
+  lastError             String?                 @db.VarChar(1000)
+  createdAt             DateTime                @default(now()) @db.DateTime(3)
+  updatedAt             DateTime                @updatedAt @db.DateTime(3)
+
+  @@unique([paymentProvider, paymentReference])
+  @@index([status, availableAt, lockedUntil])
+  @@index([tenantId, status, createdAt])
 }
 
 model C2CTransaction {
@@ -1343,7 +1395,9 @@ model C2CTransaction {
   sellerUserId     String               @db.Char(36)
   amountMinor      BigInt
   currency         String               @db.Char(3)
-  status           C2CTransactionStatus @default(PAYMENT_HELD)
+  paymentProvider  String               @db.VarChar(40)
+  paymentReference String               @db.VarChar(240)
+  status           C2CTransactionStatus
   shipmentEvidence Json?
   protectionEndsAt DateTime?            @db.DateTime(3)
   payoutEligibleAt DateTime?            @db.DateTime(3)
@@ -2224,21 +2278,24 @@ model CargoItem {
 }
 
 model FreightDocument {
-  id          String          @id @db.Char(36)
-  tenantId    String          @db.Char(36)
-  requestId   String          @db.Char(36)
-  bookingId   String?         @db.Char(36)
-  kind        String          @db.VarChar(60)
-  fileName    String          @db.VarChar(240)
-  contentType String          @db.VarChar(120)
-  sizeBytes   Int
-  checksum    String          @db.Char(64)
-  objectKey   String          @db.VarChar(500)
-  scanStatus  String          @default("QUARANTINED") @db.VarChar(40)
-  uploadedBy  String          @db.Char(36)
-  createdAt   DateTime        @default(now()) @db.DateTime(3)
-  request     FreightRequest  @relation(fields: [requestId], references: [id], onDelete: Restrict)
-  booking     FreightBooking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  id            String          @id @db.Char(36)
+  tenantId      String          @db.Char(36)
+  requestId     String          @db.Char(36)
+  bookingId     String?         @db.Char(36)
+  kind          String          @db.VarChar(60)
+  fileName      String          @db.VarChar(240)
+  contentType   String          @db.VarChar(120)
+  sizeBytes     Int
+  checksum      String          @db.Char(64)
+  objectKey     String          @db.VarChar(500)
+  scanStatus    String          @default("QUARANTINED") @db.VarChar(40)
+  scanReference String?         @db.VarChar(240)
+  uploadedAt    DateTime?       @db.DateTime(3)
+  verifiedAt    DateTime?       @db.DateTime(3)
+  uploadedBy    String          @db.Char(36)
+  createdAt     DateTime        @default(now()) @db.DateTime(3)
+  request       FreightRequest  @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  booking       FreightBooking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, objectKey])
   @@index([tenantId, requestId, kind])
@@ -2741,16 +2798,20 @@ model PaymentRefund {
   tenantId          String         @db.Char(36)
   invoiceId         String         @db.Char(36)
   sessionId         String         @db.Char(36)
+  idempotencyKey    String         @db.VarChar(160)
   providerReference String?        @db.VarChar(240)
   amountMinor       BigInt
   reason            String         @db.VarChar(500)
   status            String         @default("PENDING") @db.VarChar(40)
   requestedBy       String         @db.Char(36)
   completedAt       DateTime?      @db.DateTime(3)
+  appliedAt         DateTime?      @db.DateTime(3)
+  lastError         String?        @db.VarChar(1000)
   createdAt         DateTime       @default(now()) @db.DateTime(3)
   invoice           BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   session           PaymentSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
 
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId, invoiceId, status])
 }
 

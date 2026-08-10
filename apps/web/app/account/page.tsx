@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { AppHeader } from '../components/app-header';
+import {
+  accessToken as storedAccessToken,
+  authenticatedRequest,
+} from '../components/authenticated-api';
 
 type User = { id: string; email: string; displayName: string; permissions: string[] };
 type Session = { id: string; lastSeenAt: string; expiresAt: string; current: boolean };
@@ -21,8 +25,6 @@ type ManagedUser = {
   isActive: boolean;
   userRoles: { role: Pick<Role, 'id' | 'key' | 'name'> }[];
 };
-
-const api = '/api/v1';
 
 export default function AccountPage() {
   const [token, setToken] = useState('');
@@ -46,11 +48,12 @@ export default function AccountPage() {
     init: RequestInit = {},
     accessToken = token,
   ): Promise<unknown> {
-    const response = await fetch(`${api}${path}`, {
+    if (accessToken) return authenticatedRequest(path, init);
+    const response = await fetch(`/api/v1${path}`, {
       ...init,
+      credentials: 'include',
       headers: {
         ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
         ...init.headers,
       },
     });
@@ -86,9 +89,10 @@ export default function AccountPage() {
       setPermissions(availablePermissions);
       setManagedUsers(availableUsers);
     } catch (error) {
-      window.sessionStorage.removeItem('logicommerce_access');
-      setToken('');
-      setUser(null);
+      if (!storedAccessToken()) {
+        setToken('');
+        setUser(null);
+      }
       setMessage(error instanceof Error ? error.message : 'Your session has expired.');
     }
   }
@@ -207,9 +211,14 @@ export default function AccountPage() {
     setMessage('User roles updated. That user’s active sessions were revoked.');
   }
 
-  async function enrollMfa() {
+  async function enrollMfa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const currentCode = new FormData(event.currentTarget).get('currentCode');
     setMfaSetup(
-      (await request('/auth/mfa/totp/enroll', { method: 'POST' })) as {
+      (await request('/auth/mfa/totp/enroll', {
+        method: 'POST',
+        body: JSON.stringify({ ...(currentCode ? { currentCode } : {}) }),
+      })) as {
         secret: string;
         otpauthUri: string;
       },
@@ -332,7 +341,13 @@ export default function AccountPage() {
           <section className="panel" aria-labelledby="mfa-title">
             <h2 id="mfa-title">Multi-factor authentication</h2>
             {!mfaSetup && recoveryCodes.length === 0 ? (
-              <button onClick={() => void enrollMfa()}>Set up authenticator</button>
+              <form onSubmit={(event) => void enrollMfa(event)}>
+                <label>
+                  Current MFA or recovery code <span>(required only when replacing MFA)</span>
+                  <input name="currentCode" autoComplete="one-time-code" />
+                </label>
+                <button type="submit">Set up authenticator</button>
+              </form>
             ) : null}
             {mfaSetup ? (
               <form onSubmit={(event) => void confirmMfa(event)}>

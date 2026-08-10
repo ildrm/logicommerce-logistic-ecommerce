@@ -38,6 +38,7 @@ export class ModerateListingDto {
 
 export class CreateC2COfferDto {
   @IsInt() @Min(1) amountMinor!: number;
+  @IsString() @MinLength(8) @MaxLength(256) paymentToken!: string;
   @IsOptional() @IsUUID('4') parentOfferId?: string;
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { AppHeader } from '../components/app-header';
+import { authenticatedRequest } from '../components/authenticated-api';
 
 type Store = { id: string; key: string; name: string; defaultCurrency: string };
 type Offer = {
@@ -71,16 +72,12 @@ export default function StorefrontPage() {
     init: RequestInit = {},
     authenticated = false,
   ): Promise<T> {
-    const token =
-      typeof window === 'undefined'
-        ? ''
-        : (window.sessionStorage.getItem('logicommerce_access') ?? '');
-    if (authenticated && !token) throw new Error('Sign in before adding items to your cart.');
+    if (authenticated) return authenticatedRequest<T>(path, init);
     const response = await fetch(`${api}${path}`, {
       ...init,
+      credentials: 'include',
       headers: {
         ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...(authenticated ? { authorization: `Bearer ${token}` } : {}),
         ...init.headers,
       },
     });
@@ -173,7 +170,7 @@ export default function StorefrontPage() {
           method: 'POST',
           headers: { 'idempotency-key': crypto.randomUUID() },
           body: JSON.stringify({
-            paymentToken: 'tok_local_checkout_2026',
+            paymentToken: form.get('paymentToken'),
             address: {
               recipient: form.get('recipient'),
               line1: form.get('line1'),
@@ -317,8 +314,18 @@ export default function StorefrontPage() {
             >
               Close
             </button>
-            <p className="eyebrow">Secure checkout · local payment adapter</p>
+            <p className="eyebrow">Secure checkout</p>
             <h2>Where should it go?</h2>
+            <label>
+              Payment token
+              <input
+                name="paymentToken"
+                placeholder="Provided by the configured payment form"
+                autoComplete="off"
+                minLength={12}
+                required
+              />
+            </label>
             <label>
               Recipient
               <input name="recipient" required />

@@ -3,7 +3,7 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
-import { DeterministicCarrierAdapter } from './carrier.adapter.js';
+import { CARRIER_ADAPTER, type CarrierPort } from './carrier.adapter.js';
 import type {
   CreateAsnDto,
   CreateBinDto,
@@ -20,7 +20,7 @@ import type {
 export class FulfillmentRepository {
   constructor(
     @Inject(DATABASE) private readonly db: DatabaseClient,
-    private readonly carrier: DeterministicCarrierAdapter,
+    @Inject(CARRIER_ADAPTER) private readonly carrier: CarrierPort,
   ) {}
 
   facilities(context: TenantContext): Promise<unknown> {
@@ -362,8 +362,9 @@ export class FulfillmentRepository {
       throw new ConflictException('A packed package is required');
     }
     const shipmentId = randomUUID();
-    const label = this.carrier.createLabel({
+    const label = await this.carrier.createLabel({
       shipmentId,
+      tenantId: context.tenantId,
       carrierKey: input.carrierKey,
       serviceLevel: input.serviceLevel,
       weightGrams: order.packages[0]!.weightGrams,

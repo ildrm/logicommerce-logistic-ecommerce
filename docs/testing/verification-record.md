@@ -3,6 +3,60 @@
 This file records commands that actually ran. It is not a substitute for CI and
 must be updated with new evidence when behavior changes.
 
+## Production release hardening — 2026-08-10
+
+### Environment
+
+- Repository gates used the declared Node.js 24 toolchain through Corepack with
+  pnpm 11.15.1. The host Node.js 26 runtime remains outside the supported range.
+- Docker Compose configuration could be rendered, but the Docker daemon was not
+  available. No claim is made for a fresh migration, container build, live
+  MinIO upload, provider sandbox, or browser journey in this validation run.
+
+### Repository gates
+
+| Gate                        | Result  | Evidence summary                                            |
+| --------------------------- | ------- | ----------------------------------------------------------- |
+| Prisma schema/client        | Passed  | Format, validate, and generate completed                    |
+| Formatting                  | Passed  | All Prettier-managed files matched                          |
+| Full lint                   | Passed  | 18/18 tasks                                                 |
+| Full typecheck              | Passed  | 18/18 tasks                                                 |
+| Full unit suite             | Passed  | 18/18 tasks; API 15 files and 37 tests                      |
+| Coverage baseline           | Passed  | 10.55% lines, 9.83% statements, 8.89% branches, 7.75% funcs |
+| Production build            | Passed  | 12/12 tasks; API, worker, and 18 Next.js routes built       |
+| Production dependency audit | Passed  | No known vulnerabilities at high-or-greater threshold       |
+| Compose rendering           | Passed  | Development and production overlays exited successfully     |
+| Security diff review        | Passed  | 56/56 changed-file rows reviewed; five findings remediated  |
+| Docker/live release suites  | Pending | Docker daemon and real provider sandboxes were unavailable  |
+
+The coverage command enforces a non-regression floor and retained
+`coverage-summary.json` for CI upload. Its result is not the production target:
+the release policy requires at least 80% coverage of domain-critical behavior.
+
+### Hardening evidence
+
+- Production configuration fails closed for insecure origins/cookies, weak or
+  reused secrets, mock commerce/carrier/KYC/escrow/scanner adapters, and missing
+  SMTP or partner-webhook controls.
+- SMTP requires TLS 1.2 or newer and certificate verification. Freight upload
+  signatures bind exact byte length and SHA-256; scanner results must match
+  storage metadata. Webhook HTTPS connections remain pinned to a validated
+  public DNS address.
+- C2C countered, rejected, and expired offers create durable, leased hold-release
+  work with acknowledged completion and retry/backoff behavior.
+- Focused tests cover the new SMTP, upload integrity, webhook pinning, and C2C
+  release paths. The sealed security review is preserved under scan ID
+  `7caee2af-0a1d-4c21-b3b8-9c42ea2651ea`.
+
+### Go-live evidence boundary
+
+This repository is a release candidate. Production release remains blocked on
+the authorized CI/container security results, live migrations and rollback
+verification, provider sandbox certification, object-store/database restore
+drills, sufficient domain-critical coverage, penetration/privacy review, and
+operational telemetry/on-call acceptance listed in the production-readiness
+controls.
+
 ## Documentation and freight-timeline audit — 2026-07-28
 
 - Reviewed all 66 Markdown files present before the audit record was added.

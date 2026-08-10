@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
@@ -177,41 +178,100 @@ export class BillingService {
     context: TenantContext,
     principal: AuthPrincipal,
     sessionId: string,
+    idempotencyKey: string,
     input: RefundPaymentDto,
   ) {
+    if (idempotencyKey.trim().length < 8 || idempotencyKey.length > 160) {
+      throw new ConflictException('A valid Idempotency-Key header is required');
+    }
+    const prior = await this.db.paymentRefund.findFirst({
+      where: { tenantId: context.tenantId, idempotencyKey },
+      include: { session: true },
+    });
+    if (prior?.providerReference || (prior && prior.status !== 'PENDING')) {
+      if (prior.status === 'COMPLETED' && !prior.appliedAt) await this.applyRefund(prior.id);
+      return this.db.paymentRefund.findUniqueOrThrow({ where: { id: prior.id } });
+    }
+
+    const intent =
+      prior ??
+      (await this.db
+        .$transaction(
+          async (tx) => {
+            const replay = await tx.paymentRefund.findFirst({
+              where: { tenantId: context.tenantId, idempotencyKey },
+            });
+            if (replay) return replay;
+            const session = await tx.paymentSession.findFirst({
+              where: { id: sessionId, tenantId: context.tenantId, status: 'COMPLETED' },
+              include: { schedule: true, refunds: true },
+            });
+            if (!session) throw new NotFoundException('Resource not found');
+            const alreadyReserved = session.refunds
+              .filter((refund) => refund.status !== 'FAILED')
+              .reduce((sum, refund) => sum + Number(refund.amountMinor), 0);
+            if (input.amountMinor + alreadyReserved > Number(session.amountMinor)) {
+              throw new ConflictException('Refund exceeds the captured payment');
+            }
+            return tx.paymentRefund.create({
+              data: {
+                id: randomUUID(),
+                tenantId: context.tenantId,
+                invoiceId: session.schedule.invoiceId,
+                sessionId,
+                idempotencyKey,
+                amountMinor: input.amountMinor,
+                reason: input.reason,
+                status: 'PENDING',
+                requestedBy: principal.userId,
+              },
+            });
+          },
+          { isolationLevel: 'Serializable' },
+        )
+        .catch(async (error: unknown) => {
+          const concurrent = await this.db.paymentRefund.findFirst({
+            where: { tenantId: context.tenantId, idempotencyKey },
+          });
+          if (concurrent) return concurrent;
+          throw error;
+        }));
+
+    if (intent.sessionId !== sessionId) {
+      throw new ConflictException('Idempotency-Key was already used for another payment');
+    }
     const session = await this.db.paymentSession.findFirst({
       where: { id: sessionId, tenantId: context.tenantId, status: 'COMPLETED' },
-      include: { schedule: { include: { invoice: true } }, refunds: true },
     });
     if (!session) throw new NotFoundException('Resource not found');
-    const alreadyRefunded = session.refunds
-      .filter((refund) => refund.status !== 'FAILED')
-      .reduce((sum, refund) => sum + Number(refund.amountMinor), 0);
-    if (input.amountMinor + alreadyRefunded > Number(session.amountMinor)) {
-      throw new ConflictException('Refund exceeds the captured payment');
+    try {
+      const provider = await this.providers.refund({
+        provider: session.provider,
+        providerReference: session.providerReference,
+        amountMinor: Number(intent.amountMinor),
+        reason: intent.reason,
+        idempotencyKey,
+      });
+      const refund = await this.db.paymentRefund.update({
+        where: { id: intent.id },
+        data: {
+          providerReference: provider.reference,
+          status: provider.status,
+          lastError: null,
+          completedAt: provider.status === 'COMPLETED' ? new Date() : null,
+        },
+      });
+      if (provider.status === 'COMPLETED') await this.applyRefund(refund.id);
+      return refund;
+    } catch (error) {
+      await this.db.paymentRefund.updateMany({
+        where: { id: intent.id, tenantId: context.tenantId, providerReference: null },
+        data: {
+          lastError: error instanceof Error ? error.message.slice(0, 1000) : 'Provider error',
+        },
+      });
+      throw error;
     }
-    const provider = await this.providers.refund({
-      provider: session.provider,
-      providerReference: session.providerReference,
-      amountMinor: input.amountMinor,
-      reason: input.reason,
-    });
-    const refund = await this.db.paymentRefund.create({
-      data: {
-        id: randomUUID(),
-        tenantId: context.tenantId,
-        invoiceId: session.schedule.invoiceId,
-        sessionId,
-        providerReference: provider.reference,
-        amountMinor: input.amountMinor,
-        reason: input.reason,
-        status: provider.status,
-        requestedBy: principal.userId,
-        completedAt: provider.status === 'COMPLETED' ? new Date() : null,
-      },
-    });
-    if (provider.status === 'COMPLETED') await this.applyRefund(refund.id);
-    return refund;
   }
 
   async creditNote(
@@ -259,17 +319,15 @@ export class BillingService {
       where: { provider: input.provider, providerReference: input.providerReference },
     });
     if (!session) return { received: true, ignored: true };
-    const existing = await this.db.paymentEvent.findUnique({
+    const event = await this.db.paymentEvent.upsert({
       where: {
         provider_providerEventId: {
           provider: input.provider,
           providerEventId: input.eventId,
         },
       },
-    });
-    if (existing) return { received: true, duplicate: true };
-    const event = await this.db.paymentEvent.create({
-      data: {
+      update: {},
+      create: {
         id: randomUUID(),
         tenantId: session.tenantId,
         sessionId: session.id,
@@ -280,24 +338,43 @@ export class BillingService {
         payload: input.payload as Prisma.InputJsonValue,
       },
     });
-    if (input.success) {
-      await this.processSuccessfulPayment(session.id, event.id, input.payload);
-    } else if (input.failed) {
-      await this.db.$transaction([
-        this.db.paymentSession.update({
-          where: { id: session.id },
-          data: { status: 'FAILED' },
-        }),
-        this.db.paymentEvent.update({
+    if (event.status === 'PROCESSED') return { received: true, duplicate: true };
+    const claimed = await this.db.paymentEvent.updateMany({
+      where: { id: event.id, status: { in: ['RECEIVED', 'FAILED'] } },
+      data: { status: 'PROCESSING', error: null },
+    });
+    if (claimed.count !== 1) {
+      throw new ServiceUnavailableException('Payment event is already being processed');
+    }
+    try {
+      if (input.success) {
+        await this.processSuccessfulPayment(session.id, event.id, input.payload);
+      } else if (input.failed) {
+        await this.db.$transaction([
+          this.db.paymentSession.update({
+            where: { id: session.id },
+            data: { status: 'FAILED' },
+          }),
+          this.db.paymentEvent.update({
+            where: { id: event.id },
+            data: { status: 'PROCESSED', processedAt: new Date() },
+          }),
+        ]);
+      } else {
+        await this.db.paymentEvent.update({
           where: { id: event.id },
           data: { status: 'PROCESSED', processedAt: new Date() },
-        }),
-      ]);
-    } else {
-      await this.db.paymentEvent.update({
-        where: { id: event.id },
-        data: { status: 'PROCESSED', processedAt: new Date() },
+        });
+      }
+    } catch (error) {
+      await this.db.paymentEvent.updateMany({
+        where: { id: event.id, status: 'PROCESSING' },
+        data: {
+          status: 'FAILED',
+          error: error instanceof Error ? error.message.slice(0, 1000) : 'Processing failed',
+        },
       });
+      throw error;
     }
     return { received: true };
   }
@@ -312,7 +389,16 @@ export class BillingService {
         where: { id: sessionId },
         include: { schedule: { include: { invoice: true } }, allocations: true },
       });
-      if (!session || session.allocations.length > 0) return;
+      if (!session) throw new NotFoundException('Payment session not found');
+      if (session.allocations.length > 0) {
+        if (!eventId.startsWith('mock-event-')) {
+          await tx.paymentEvent.update({
+            where: { id: eventId },
+            data: { status: 'PROCESSED', processedAt: new Date(), error: null },
+          });
+        }
+        return;
+      }
       const invoice = session.schedule.invoice;
       const amount = session.amountMinor;
       const paidMinor = invoice.paidMinor + amount;
@@ -458,6 +544,11 @@ export class BillingService {
         include: { invoice: true },
       });
       if (!refund || refund.status !== 'COMPLETED') return;
+      const claimed = await tx.paymentRefund.updateMany({
+        where: { id: refund.id, status: 'COMPLETED', appliedAt: null },
+        data: { appliedAt: new Date() },
+      });
+      if (claimed.count !== 1) return;
       const paidMinor = refund.invoice.paidMinor - refund.amountMinor;
       await tx.billingInvoice.update({
         where: { id: refund.invoiceId },

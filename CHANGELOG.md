@@ -26,6 +26,14 @@ work is recorded under `Unreleased` rather than rewriting historical limits.
 
 ### Added
 
+- Production provider adapters and fail-closed configuration for commerce,
+  carriers, KYC, C2C escrow, document scanning, SMTP, and partner webhooks.
+- Durable C2C hold-release processing, checksum/length-bound freight uploads,
+  TLS-enforced SMTP submission, DNS-pinned webhook delivery, durable payment
+  refunds/retries, outbox acknowledgements, and carrier webhook scheduling.
+- A production Compose overlay, provider contract guide, release-readiness
+  controls, production configuration validation, and an enforceable coverage
+  baseline with a retained CI artifact.
 - Continuation guide, documentation map, phase roadmap, and verification record.
 - Phase 1 local authentication API with Argon2 password verification,
   short-lived access tokens, opaque rotating refresh tokens, reuse detection,
@@ -101,6 +109,11 @@ work is recorded under `Unreleased` rather than rewriting historical limits.
 
 ### Validated
 
+- Production-hardening repository gates on 2026-08-10: formatting, 18/18 lint,
+  18/18 typecheck, 18/18 unit tasks (API 15 files/37 tests), 12/12 production
+  build tasks, dependency audit, Prisma validation/generation, and development
+  and production Compose rendering. Live provider and Docker-backed release
+  evidence remains an explicit go-live gate.
 - Authentication unit tests, full lint/typecheck/test gates, production build,
   formatting, and development/production Compose config.
 - Live MySQL authentication flows, concurrent refresh reuse, persisted token

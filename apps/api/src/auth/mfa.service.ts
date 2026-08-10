@@ -26,8 +26,13 @@ export class MfaService {
     @Inject(AUTH_STORE) private readonly audits: AuthStore,
   ) {}
 
-  async enroll(context: TenantContext, principal: AuthPrincipal) {
+  async enroll(context: TenantContext, principal: AuthPrincipal, currentCode?: string) {
     const secret = this.base32(randomBytes(20));
+    const confirmed = await this.credential(context.tenantId, principal.userId, true);
+    if (confirmed) {
+      if (!currentCode) throw new UnauthorizedException('Current MFA code is required');
+      await this.assertLogin(context, principal.userId, currentCode);
+    }
     const credential = await this.database.mfaCredential.upsert({
       where: {
         tenantId_userId_kind: {
@@ -36,7 +41,15 @@ export class MfaService {
           kind: 'TOTP',
         },
       },
-      update: { secretCiphertext: this.encrypt(secret), confirmedAt: null, lastUsedStep: null },
+      update: confirmed
+        ? { pendingSecretCiphertext: this.encrypt(secret), pendingCreatedAt: new Date() }
+        : {
+            secretCiphertext: this.encrypt(secret),
+            pendingSecretCiphertext: null,
+            pendingCreatedAt: null,
+            confirmedAt: null,
+            lastUsedStep: null,
+          },
       create: {
         id: randomUUID(),
         tenantId: context.tenantId,
@@ -46,9 +59,11 @@ export class MfaService {
       },
       select: { id: true },
     });
-    await this.database.mfaRecoveryCode.deleteMany({
-      where: { tenantId: context.tenantId, credentialId: credential.id },
-    });
+    if (!confirmed) {
+      await this.database.mfaRecoveryCode.deleteMany({
+        where: { tenantId: context.tenantId, credentialId: credential.id },
+      });
+    }
     const user = await this.database.user.findFirstOrThrow({
       where: { id: principal.userId, tenantId: context.tenantId },
       select: { email: true },
@@ -66,8 +81,16 @@ export class MfaService {
 
   async confirm(context: TenantContext, principal: AuthPrincipal, code: string) {
     const credential = await this.credential(context.tenantId, principal.userId, false);
-    const candidate = credential
-      ? this.validTotp(this.decrypt(credential.secretCiphertext), code)
+    if (
+      credential?.pendingSecretCiphertext &&
+      (!credential.pendingCreatedAt ||
+        credential.pendingCreatedAt < new Date(Date.now() - 10 * 60_000))
+    ) {
+      throw new UnauthorizedException('MFA enrollment expired');
+    }
+    const candidateSecret = credential?.pendingSecretCiphertext ?? credential?.secretCiphertext;
+    const candidate = candidateSecret
+      ? this.validTotp(this.decrypt(candidateSecret), code)
       : { valid: false as const };
     if (!credential || !candidate.valid || candidate.step === undefined) {
       throw new UnauthorizedException('Invalid MFA code');
@@ -77,7 +100,15 @@ export class MfaService {
     await this.database.$transaction(async (transaction) => {
       await transaction.mfaCredential.updateMany({
         where: { id: credential.id, tenantId: context.tenantId, userId: principal.userId },
-        data: { confirmedAt: new Date(), lastUsedStep: confirmedStep },
+        data: {
+          ...(credential.pendingSecretCiphertext
+            ? { secretCiphertext: credential.pendingSecretCiphertext }
+            : {}),
+          pendingSecretCiphertext: null,
+          pendingCreatedAt: null,
+          confirmedAt: new Date(),
+          lastUsedStep: confirmedStep,
+        },
       });
       await transaction.mfaRecoveryCode.deleteMany({
         where: { tenantId: context.tenantId, credentialId: credential.id },
@@ -149,7 +180,12 @@ export class MfaService {
         kind: 'TOTP',
         ...(confirmed ? { confirmedAt: { not: null } } : {}),
       },
-      select: { id: true, secretCiphertext: true },
+      select: {
+        id: true,
+        secretCiphertext: true,
+        pendingSecretCiphertext: true,
+        pendingCreatedAt: true,
+      },
     });
   }
 

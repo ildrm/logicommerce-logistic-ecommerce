@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 const baseUrl = process.env.E2E_BASE_URL ?? 'http://localhost:8080';
 const tenantId = '00000000-0000-4000-8000-000000000001';
@@ -88,6 +88,38 @@ const submitted = await json(
   201,
 );
 assert.equal(submitted.status, 'SUBMITTED');
+
+const uploadBody = Buffer.from('%PDF-1.4\n% LogiCommerce test cargo document\n%%EOF\n');
+const uploadChecksum = createHash('sha256').update(uploadBody).digest('hex');
+const uploadIntent = await json(
+  await api(`/freight/requests/${request.id}/documents/upload-url`, admin, {
+    method: 'POST',
+    body: JSON.stringify({
+      kind: 'CARGO',
+      fileName: 'cargo-test.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: uploadBody.length,
+      checksum: uploadChecksum,
+    }),
+  }),
+  201,
+);
+const objectUpload = await fetch(uploadIntent.upload.url, {
+  method: 'PUT',
+  headers: uploadIntent.upload.headers,
+  body: uploadBody,
+});
+assert.equal(objectUpload.ok, true, await objectUpload.clone().text());
+const completedDocument = await json(
+  await api(
+    `/freight/requests/${request.id}/documents/${uploadIntent.document.id}/complete`,
+    admin,
+    { method: 'POST' },
+  ),
+  201,
+);
+assert.equal(completedDocument.scanStatus, 'CLEAN');
+assert.equal(completedDocument.checksum, uploadChecksum);
 
 const crossTenant = await api(`/freight/requests/${request.id}`, admin, {}, isolationTenantId);
 assert.notEqual(crossTenant.status, 200);

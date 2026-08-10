@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { authenticatedRequest } from '../components/authenticated-api';
 import { AppHeader } from '../components/app-header';
 
 type Point = { date: string; value: number };
@@ -312,15 +313,11 @@ export function DashboardClient() {
     if (background) setRefreshing(true);
     else setLoading(true);
     try {
-      const response = await fetch(`/api/v1/analytics/overview?days=${selectedDays}`, {
-        headers: { authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        const problem = (await response.json().catch(() => null)) as { detail?: string } | null;
-        throw new Error(problem?.detail ?? 'Analytics could not be loaded.');
-      }
-      setData((await response.json()) as AnalyticsOverview);
+      setData(
+        await authenticatedRequest<AnalyticsOverview>(`/analytics/overview?days=${selectedDays}`, {
+          cache: 'no-store',
+        }),
+      );
       setError('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Analytics could not be loaded.');

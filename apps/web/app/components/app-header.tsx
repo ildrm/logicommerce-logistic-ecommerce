@@ -41,7 +41,7 @@ export function AppHeader({ active, compact = false }: AppHeaderProps) {
           </a>
         ))}
       </nav>
-      <a className="header-action" href="http://localhost:8080/api/docs">
+      <a className="header-action" href="/api/docs">
         API
         <span className="sr-only"> documentation</span>
       </a>

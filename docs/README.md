@@ -56,6 +56,7 @@ has just cloned the repository should read the documents in this order:
 - [Static-analysis triage](security/static-analysis.md)
 - [Phase 11 hardening review](security/hardening-2026-07/hardening.md)
 - [Production readiness controls](operations/production-readiness.md)
+- [Production provider contracts](operations/provider-contracts.md)
 - [Backup and restore runbook](operations/backup-restore-runbook.md)
 - [Incident, rollout, and key-rotation runbook](operations/incident-rollout-runbook.md)
 - [Freight, payment, and driver-coordination runbook](operations/phase12-freight-payments-runbook.md)

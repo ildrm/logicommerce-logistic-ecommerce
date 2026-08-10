@@ -19,13 +19,37 @@ import type {
   ShipmentEvidenceDto,
   VerifySellerDto,
 } from './c2c.dto.js';
-import { DeterministicIdentityVerificationAdapter } from './identity-verification.adapter.js';
+import {
+  IDENTITY_VERIFICATION,
+  type IdentityVerificationPort,
+} from './identity-verification.adapter.js';
+import { MARKETPLACE_PAYMENT, type MarketplacePaymentPort } from './marketplace-payment.adapter.js';
+
+type ReleasableOffer = {
+  id: string;
+  tenantId: string;
+  paymentProvider: string;
+  paymentReference: string;
+  paymentIdempotencyKey: string;
+};
+
+function paymentReleaseData(offer: ReleasableOffer) {
+  return {
+    id: randomUUID(),
+    tenantId: offer.tenantId,
+    offerId: offer.id,
+    paymentProvider: offer.paymentProvider,
+    paymentReference: offer.paymentReference,
+    paymentIdempotencyKey: offer.paymentIdempotencyKey,
+  };
+}
 
 @Injectable()
 export class C2CRepository {
   constructor(
     @Inject(DATABASE) private readonly db: DatabaseClient,
-    private readonly verification: DeterministicIdentityVerificationAdapter,
+    @Inject(IDENTITY_VERIFICATION) private readonly verification: IdentityVerificationPort,
+    @Inject(MARKETPLACE_PAYMENT) private readonly payments: MarketplacePaymentPort,
   ) {}
 
   async verifySeller(
@@ -33,7 +57,11 @@ export class C2CRepository {
     principal: AuthPrincipal,
     input: VerifySellerDto,
   ): Promise<unknown> {
-    const result = this.verification.verify(input.verificationToken);
+    const result = await this.verification.verify({
+      token: input.verificationToken,
+      tenantId: context.tenantId,
+      userId: principal.userId,
+    });
     return this.db.c2CSellerProfile.upsert({
       where: { tenantId_userId: { tenantId: context.tenantId, userId: principal.userId } },
       create: {
@@ -134,8 +162,20 @@ export class C2CRepository {
     context: TenantContext,
     principal: AuthPrincipal,
     listingId: string,
+    idempotencyKey: string,
     input: CreateC2COfferDto,
   ): Promise<unknown> {
+    if (idempotencyKey.trim().length < 8 || idempotencyKey.length > 160) {
+      throw new ConflictException('A valid Idempotency-Key header is required');
+    }
+    const replay = await this.db.c2COffer.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        buyerUserId: principal.userId,
+        paymentIdempotencyKey: idempotencyKey,
+      },
+    });
+    if (replay) return replay;
     const listing = await this.db.c2CListing.findFirst({
       where: {
         id: listingId,
@@ -148,24 +188,68 @@ export class C2CRepository {
     if (listing.sellerUserId === principal.userId) {
       throw new ConflictException('A seller cannot bid on their own listing');
     }
+    let parentOffer: ReleasableOffer | null = null;
     if (input.parentOfferId) {
       const parent = await this.db.c2COffer.findFirst({
-        where: { id: input.parentOfferId, tenantId: context.tenantId, listingId },
+        where: {
+          id: input.parentOfferId,
+          tenantId: context.tenantId,
+          listingId,
+          buyerUserId: principal.userId,
+          status: 'OPEN',
+        },
       });
       if (!parent) throw new NotFoundException('Resource not found');
-      await this.db.c2COffer.update({ where: { id: parent.id }, data: { status: 'COUNTERED' } });
+      parentOffer = parent;
     }
-    return this.db.c2COffer.create({
-      data: {
-        id: randomUUID(),
-        tenantId: context.tenantId,
-        listingId,
-        buyerUserId: principal.userId,
-        parentOfferId: input.parentOfferId ?? null,
-        amountMinor: input.amountMinor,
-        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1_000),
-      },
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1_000);
+    const hold = await this.payments.hold({
+      paymentToken: input.paymentToken,
+      amountMinor: input.amountMinor,
+      currency: listing.currency,
+      tenantId: context.tenantId,
+      buyerUserId: principal.userId,
+      listingId,
+      idempotencyKey,
+      expiresAt,
     });
+    try {
+      return await this.db.$transaction(async (tx) => {
+        if (parentOffer) {
+          const countered = await tx.c2COffer.updateMany({
+            where: { id: parentOffer.id, tenantId: context.tenantId, status: 'OPEN' },
+            data: { status: 'COUNTERED' },
+          });
+          if (countered.count !== 1) throw new ConflictException('Parent offer changed');
+          await tx.c2CPaymentRelease.create({ data: paymentReleaseData(parentOffer) });
+        }
+        return tx.c2COffer.create({
+          data: {
+            id: randomUUID(),
+            tenantId: context.tenantId,
+            listingId,
+            buyerUserId: principal.userId,
+            parentOfferId: parentOffer?.id ?? null,
+            amountMinor: input.amountMinor,
+            paymentProvider: hold.provider,
+            paymentReference: hold.reference,
+            paymentIdempotencyKey: idempotencyKey,
+            expiresAt,
+          },
+        });
+      });
+    } catch (error) {
+      const concurrentReplay = await this.db.c2COffer.findFirst({
+        where: {
+          tenantId: context.tenantId,
+          buyerUserId: principal.userId,
+          paymentIdempotencyKey: idempotencyKey,
+        },
+      });
+      if (concurrentReplay) return concurrentReplay;
+      await this.payments.release(hold.reference, idempotencyKey);
+      throw error;
+    }
   }
 
   async acceptOffer(
@@ -175,13 +259,26 @@ export class C2CRepository {
   ): Promise<unknown> {
     return this.db.$transaction(async (tx) => {
       const offer = await tx.c2COffer.findFirst({
-        where: { id: offerId, tenantId: context.tenantId, status: 'OPEN' },
+        where: {
+          id: offerId,
+          tenantId: context.tenantId,
+          status: 'OPEN',
+          paymentProvider: { not: 'LEGACY_UNVERIFIED' },
+        },
         include: { listing: true },
       });
       if (!offer || offer.listing.sellerUserId !== principal.userId) {
         throw new NotFoundException('Resource not found');
       }
       if (offer.expiresAt <= new Date()) throw new ConflictException('Offer expired');
+      const losingOffers = await tx.c2COffer.findMany({
+        where: {
+          tenantId: context.tenantId,
+          listingId: offer.listingId,
+          id: { not: offer.id },
+          status: 'OPEN',
+        },
+      });
       await tx.c2COffer.update({
         where: { id: offer.id },
         data: { status: 'ACCEPTED', acceptedAt: new Date() },
@@ -195,6 +292,12 @@ export class C2CRepository {
         },
         data: { status: 'REJECTED' },
       });
+      if (losingOffers.length > 0) {
+        await tx.c2CPaymentRelease.createMany({
+          data: losingOffers.map(paymentReleaseData),
+          skipDuplicates: true,
+        });
+      }
       await tx.c2CListing.update({
         where: { id: offer.listingId },
         data: { status: 'SOLD', version: { increment: 1 } },
@@ -209,8 +312,88 @@ export class C2CRepository {
           sellerUserId: offer.listing.sellerUserId,
           amountMinor: offer.amountMinor,
           currency: offer.listing.currency,
+          paymentProvider: offer.paymentProvider,
+          paymentReference: offer.paymentReference,
+          status: 'PAYMENT_HELD',
         },
       });
+    });
+  }
+
+  async processPaymentReleases(limit = 25): Promise<number> {
+    await this.queueExpiredOfferReleases(limit);
+    const now = new Date();
+    const candidates = await this.db.c2CPaymentRelease.findMany({
+      where: {
+        availableAt: { lte: now },
+        OR: [
+          { status: { in: ['PENDING', 'RETRYING'] } },
+          { status: 'PROCESSING', lockedUntil: { lt: now } },
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+    let processed = 0;
+    for (const candidate of candidates) {
+      const lockedUntil = new Date(Date.now() + 60_000);
+      const claimed = await this.db.c2CPaymentRelease.updateMany({
+        where: {
+          id: candidate.id,
+          availableAt: { lte: now },
+          OR: [
+            { status: { in: ['PENDING', 'RETRYING'] } },
+            { status: 'PROCESSING', lockedUntil: { lt: now } },
+          ],
+        },
+        data: { status: 'PROCESSING', lockedUntil, attempts: { increment: 1 } },
+      });
+      if (claimed.count !== 1) continue;
+      try {
+        await this.payments.release(candidate.paymentReference, candidate.paymentIdempotencyKey);
+        await this.db.c2CPaymentRelease.update({
+          where: { id: candidate.id },
+          data: {
+            status: 'RELEASED',
+            releasedAt: new Date(),
+            lockedUntil: null,
+            lastError: null,
+          },
+        });
+      } catch (error) {
+        const delaySeconds = Math.min(3_600, 2 ** Math.min(candidate.attempts + 1, 10));
+        await this.db.c2CPaymentRelease.update({
+          where: { id: candidate.id },
+          data: {
+            status: 'RETRYING',
+            availableAt: new Date(Date.now() + delaySeconds * 1_000),
+            lockedUntil: null,
+            lastError: error instanceof Error ? error.message.slice(0, 1_000) : 'release_failed',
+          },
+        });
+      }
+      processed += 1;
+    }
+    return processed;
+  }
+
+  private async queueExpiredOfferReleases(limit: number): Promise<void> {
+    const expired = await this.db.c2COffer.findMany({
+      where: { status: 'OPEN', expiresAt: { lte: new Date() } },
+      orderBy: { expiresAt: 'asc' },
+      take: limit,
+    });
+    if (expired.length === 0) return;
+    await this.db.$transaction(async (tx) => {
+      for (const offer of expired) {
+        const changed = await tx.c2COffer.updateMany({
+          where: { id: offer.id, status: 'OPEN' },
+          data: { status: 'EXPIRED' },
+        });
+        if (changed.count === 1) {
+          await tx.c2CPaymentRelease.create({ data: paymentReleaseData(offer) });
+        }
+      }
     });
   }
 

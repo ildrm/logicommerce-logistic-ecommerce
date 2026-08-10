@@ -64,6 +64,10 @@ export class CreateBusinessQuoteDto {
   @IsOptional() @IsObject() terms?: Record<string, unknown>;
 }
 
+export class AddSellerMemberDto {
+  @IsUUID('4') userId!: string;
+}
+
 export class AcceptBusinessQuoteDto {
   @IsString() @MinLength(2) @MaxLength(160) purchaseOrderRef!: string;
 }

@@ -13,6 +13,7 @@ import { nextInvoiceNumber } from '../billing/invoice-issuance.js';
 import type {
   AcceptBusinessQuoteDto,
   AddBusinessMemberDto,
+  AddSellerMemberDto,
   ContractPriceDto,
   CreateBusinessAccountDto,
   CreateBusinessQuoteDto,
@@ -94,6 +95,33 @@ export class B2BRepository {
     });
   }
 
+  async addSellerMember(
+    context: TenantContext,
+    sellerId: string,
+    input: AddSellerMemberDto,
+  ): Promise<unknown> {
+    const [seller, user] = await Promise.all([
+      this.db.seller.findFirst({
+        where: { id: sellerId, tenantId: context.tenantId, status: 'ACTIVE' },
+      }),
+      this.db.user.findFirst({
+        where: { id: input.userId, tenantId: context.tenantId, isActive: true },
+      }),
+    ]);
+    if (!seller || !user) throw new NotFoundException('Resource not found');
+    return this.db.sellerMember.upsert({
+      where: {
+        tenantId_sellerId_userId: {
+          tenantId: context.tenantId,
+          sellerId,
+          userId: input.userId,
+        },
+      },
+      create: { id: randomUUID(), tenantId: context.tenantId, sellerId, userId: input.userId },
+      update: {},
+    });
+  }
+
   async prices(
     context: TenantContext,
     principal: AuthPrincipal,
@@ -115,10 +143,18 @@ export class B2BRepository {
       );
   }
 
-  rfqs(context: TenantContext): Promise<unknown> {
+  async rfqs(context: TenantContext, principal: AuthPrincipal): Promise<unknown> {
+    const sellerIds = await this.sellerIds(context, principal);
+    if (sellerIds.length === 0) return [];
     return this.db.requestForQuote.findMany({
       where: { tenantId: context.tenantId },
-      include: { lines: true, quotes: { include: { lines: true, order: true } } },
+      include: {
+        lines: true,
+        quotes: {
+          where: { sellerId: { in: sellerIds } },
+          include: { lines: true, order: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -163,9 +199,15 @@ export class B2BRepository {
 
   async quote(
     context: TenantContext,
+    principal: AuthPrincipal,
     rfqId: string,
     input: CreateBusinessQuoteDto,
   ): Promise<unknown> {
+    const sellerIds = await this.sellerIds(context, principal);
+    const sellerId = input.sellerId ?? (sellerIds.length === 1 ? sellerIds[0] : undefined);
+    if (!sellerId || !sellerIds.includes(sellerId)) {
+      throw new ForbiddenException('Seller membership is required');
+    }
     const rfq = await this.db.requestForQuote.findFirst({
       where: {
         id: rfqId,
@@ -188,7 +230,7 @@ export class B2BRepository {
         id: randomUUID(),
         tenantId: context.tenantId,
         rfqId,
-        sellerId: input.sellerId ?? null,
+        sellerId,
         totalMinor: quoted.reduce((sum, line) => sum + line.unitPriceMinor * line.quantity, 0),
         validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000),
         terms: (input.terms ?? null) as Prisma.InputJsonValue,
@@ -298,15 +340,19 @@ export class B2BRepository {
 
   async fulfill(
     context: TenantContext,
+    principal: AuthPrincipal,
     orderId: string,
     input: FulfillBusinessOrderDto,
   ): Promise<unknown> {
+    const sellerIds = await this.sellerIds(context, principal);
+    if (sellerIds.length === 0) throw new NotFoundException('Resource not found');
     return this.db.$transaction(async (tx) => {
       const order = await tx.businessOrder.findFirst({
         where: {
           id: orderId,
           tenantId: context.tenantId,
           status: { in: ['APPROVED', 'PARTIALLY_FULFILLED'] },
+          quote: { sellerId: { in: sellerIds } },
         },
         include: { lines: true, account: true },
       });
@@ -386,6 +432,14 @@ export class B2BRepository {
       }
       return updated;
     });
+  }
+
+  private async sellerIds(context: TenantContext, principal: AuthPrincipal): Promise<string[]> {
+    const memberships = await this.db.sellerMember.findMany({
+      where: { tenantId: context.tenantId, userId: principal.userId },
+      select: { sellerId: true },
+    });
+    return memberships.map((membership) => membership.sellerId);
   }
 
   orders(context: TenantContext): Promise<unknown> {

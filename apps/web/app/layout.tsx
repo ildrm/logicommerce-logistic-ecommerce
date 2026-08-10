@@ -5,6 +5,13 @@ import './globals.css';
 export const metadata: Metadata = {
   title: { default: 'LogiCommerce', template: '%s · LogiCommerce' },
   description: 'Multi-tenant commerce and logistics orchestration.',
+  applicationName: 'LogiCommerce',
+  openGraph: {
+    type: 'website',
+    siteName: 'LogiCommerce',
+    title: 'LogiCommerce',
+    description: 'Multi-tenant commerce and logistics orchestration.',
+  },
   robots: { index: false, follow: false },
 };
 

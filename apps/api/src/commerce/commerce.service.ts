@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import type { TenantContext } from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import type {
@@ -12,11 +12,8 @@ import type {
   UpdateCartLineDto,
 } from './commerce.dto.js';
 import {
-  DeterministicAddressAdapter,
-  DeterministicFraudAdapter,
-  DeterministicPaymentAdapter,
-  DeterministicShippingAdapter,
-  DeterministicTaxAdapter,
+  COMMERCE_ADAPTER,
+  type CommerceAdapter,
   type NormalizedAddress,
 } from './commerce-adapters.js';
 import {
@@ -29,11 +26,7 @@ import {
 export class CommerceService {
   constructor(
     private readonly commerce: CommerceRepository,
-    private readonly addresses: DeterministicAddressAdapter,
-    private readonly taxes: DeterministicTaxAdapter,
-    private readonly shipping: DeterministicShippingAdapter,
-    private readonly fraud: DeterministicFraudAdapter,
-    private readonly payments: DeterministicPaymentAdapter,
+    @Inject(COMMERCE_ADAPTER) private readonly adapter: CommerceAdapter,
   ) {}
 
   inventoryFeed(context: TenantContext, principal: AuthPrincipal, input: InventoryFeedDto) {
@@ -131,17 +124,18 @@ export class CommerceService {
     const replay = await this.commerce.checkoutReplay(context, principal, cartId, idempotencyKey);
     if (replay) return replay;
     const cart = await this.commerce.cart(context, principal, cartId);
-    const address = await this.addresses.validate(input.address);
+    const address = await this.adapter.validate(input.address);
     const quote = await this.calculateQuote(context, cart, input.promotionCode, address);
-    const fraudDecision = await this.fraud.assess({
+    const fraudDecision = await this.adapter.assess({
       totalMinor: quote.totalMinor,
       userId: principal.userId,
     });
     if (fraudDecision !== 'APPROVED') throw new ForbiddenException('Checkout was declined');
-    const payment = await this.payments.authorize({
+    const payment = await this.adapter.authorize({
       paymentToken: input.paymentToken,
       amountMinor: quote.totalMinor,
       currency: quote.currency,
+      idempotencyKey,
     });
     try {
       return await this.commerce.checkout(context, principal, cartId, {
@@ -153,7 +147,7 @@ export class CommerceService {
         fraudDecision,
       });
     } catch (error) {
-      await this.payments.void(payment.reference);
+      await this.adapter.void(payment.reference);
       throw error;
     }
   }
@@ -215,8 +209,8 @@ export class CommerceService {
       cart.lines.map((line) => `${line.offer.sellerId}:${line.offer.supplierId}`),
     ).size;
     const [taxMinor, shippingMinor] = await Promise.all([
-      this.taxes.quote(taxableMinor, address),
-      this.shipping.quote(splitCount, address),
+      this.adapter.quoteTax(taxableMinor, address),
+      this.adapter.quoteShipping(splitCount, address),
     ]);
     return {
       subtotalMinor,
