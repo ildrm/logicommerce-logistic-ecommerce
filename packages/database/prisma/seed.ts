@@ -13,17 +13,19 @@ const driverCoordinatorRoleId = '00000000-0000-4000-8000-000000000203';
 const hubOperatorRoleId = '00000000-0000-4000-8000-000000000204';
 const postalOperatorRoleId = '00000000-0000-4000-8000-000000000205';
 const insuranceAdjusterRoleId = '00000000-0000-4000-8000-000000000206';
+const customerRoleId = '00000000-0000-4000-8000-000000000207';
 
 async function seed() {
   const passwordHash = await hash('ChangeMe-Local-Only-2026');
 
   await database.tenant.upsert({
     where: { id: tenantId },
-    update: {},
+    update: { selfRegistrationEnabled: true },
     create: {
       id: tenantId,
       slug: 'platform-demo',
       name: 'LogiCommerce Demo',
+      selfRegistrationEnabled: true,
       domains: {
         create: {
           id: '00000000-0000-4000-8000-000000000002',
@@ -383,6 +385,21 @@ async function seed() {
   });
 
   await database.role.upsert({
+    where: { tenantId_key: { tenantId, key: 'customer' } },
+    update: {
+      name: 'Customer',
+      description: 'Uses customer commerce, marketplace, freight, insurance, and postal flows.',
+    },
+    create: {
+      id: customerRoleId,
+      tenantId,
+      key: 'customer',
+      name: 'Customer',
+      description: 'Uses customer commerce, marketplace, freight, insurance, and postal flows.',
+    },
+  });
+
+  await database.role.upsert({
     where: { tenantId_key: { tenantId, key: 'driver-coordinator' } },
     update: {
       name: 'Driver coordinator',
@@ -440,9 +457,13 @@ async function seed() {
     ),
   );
 
-  const viewerGrants = permissions.filter((permission) =>
+  await database.rolePermission.deleteMany({ where: { roleId: viewerRoleId } });
+
+  const customerGrants = permissions.filter((permission) =>
     [
+      'cart.use',
       'c2c.trade',
+      'return.use',
       'transport.request.use',
       'billing.invoice.read',
       'payment.use',
@@ -450,11 +471,11 @@ async function seed() {
       'postal.use',
     ].includes(permission.key),
   );
-  for (const permission of viewerGrants) {
+  for (const permission of customerGrants) {
     await database.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId: viewerRoleId, permissionId: permission.id } },
+      where: { roleId_permissionId: { roleId: customerRoleId, permissionId: permission.id } },
       update: {},
-      create: { roleId: viewerRoleId, permissionId: permission.id },
+      create: { roleId: customerRoleId, permissionId: permission.id },
     });
   }
 
@@ -529,12 +550,12 @@ async function seed() {
 
   await database.user.upsert({
     where: { tenantId_email: { tenantId, email: 'viewer@demo.logicommerce.local' } },
-    update: {},
+    update: { displayName: 'Demo Customer' },
     create: {
       id: viewerUserId,
       tenantId,
       email: 'viewer@demo.logicommerce.local',
-      displayName: 'Demo Read-only Viewer',
+      displayName: 'Demo Customer',
       verifiedAt: new Date(),
       identities: {
         create: {
@@ -546,8 +567,12 @@ async function seed() {
           passwordHash,
         },
       },
-      userRoles: { create: { tenantId, roleId: viewerRoleId } },
+      userRoles: { create: { tenantId, roleId: customerRoleId } },
     },
+  });
+  await database.userRole.deleteMany({ where: { tenantId, userId: viewerUserId } });
+  await database.userRole.create({
+    data: { tenantId, userId: viewerUserId, roleId: customerRoleId },
   });
 
   const storeId = '00000000-0000-4000-8000-000000000401';

@@ -93,6 +93,53 @@ async function verifyPermissionPolicy() {
   assert.equal(viewerResponse.status, 403);
 }
 
+async function verifyCustomerRegistration() {
+  const admin = await login();
+  assert.equal(admin.response.status, 200);
+  const settingsPath = '/tenants/current/registration';
+  const disabled = await apiAuthenticated(settingsPath, admin.body.accessToken, {
+    method: 'PATCH',
+    body: JSON.stringify({ selfRegistrationEnabled: false }),
+  });
+  assert.equal(disabled.status, 200);
+
+  const email = `customer-${Date.now()}@demo.logicommerce.local`;
+  const registrationInput = {
+    email,
+    displayName: 'Live Test Customer',
+    password: 'Registration-Only-Password-2026',
+  };
+  const blocked = await fetch(`${baseUrl}/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(registrationInput),
+  });
+  assert.equal(blocked.status, 403);
+
+  const enabled = await apiAuthenticated(settingsPath, admin.body.accessToken, {
+    method: 'PATCH',
+    body: JSON.stringify({ selfRegistrationEnabled: true }),
+  });
+  assert.equal(enabled.status, 200);
+  const registered = await fetch(`${baseUrl}/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(registrationInput),
+  });
+  assert.equal(registered.status, 201);
+  const body = await registered.json();
+  assert.equal((await authenticated('/me', body.accessToken)).status, 200);
+  assert.deepEqual(body.user.roles, ['customer']);
+  assert.ok(body.user.permissions.includes('cart.use'));
+
+  const duplicate = await fetch(`${baseUrl}/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(registrationInput),
+  });
+  assert.equal(duplicate.status, 409);
+}
+
 async function verifyLoginRateLimit() {
   const unknownCredentials = {
     email: `unknown-${Date.now()}@demo.logicommerce.local`,
@@ -390,6 +437,7 @@ async function verifyConcurrentReuse() {
 
 await verifyCoreFlow();
 await verifyConcurrentReuse();
+await verifyCustomerRegistration();
 await verifyPermissionPolicy();
 await verifyPhaseOneExitScenario();
 await verifyLoginRateLimit();

@@ -28,6 +28,7 @@ export type TenantSummary = {
   readonly name: string;
   readonly defaultLocale: string;
   readonly defaultCurrency: string;
+  readonly selfRegistrationEnabled: boolean;
 };
 
 export type AuthenticatedUser = {

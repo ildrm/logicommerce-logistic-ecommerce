@@ -13,8 +13,19 @@ export class JsonSafeInterceptor implements NestInterceptor {
   }
 
   private serialize(value: unknown): unknown {
-    if (typeof value === 'bigint') return Number(value);
-    if (value instanceof Date || value === null || typeof value !== 'object') return value;
+    if (typeof value === 'bigint') {
+      const number = Number(value);
+      return Number.isSafeInteger(number) ? number : value.toString();
+    }
+    if (
+      value instanceof Date ||
+      Buffer.isBuffer(value) ||
+      value instanceof Uint8Array ||
+      value === null ||
+      typeof value !== 'object'
+    ) {
+      return value;
+    }
     if (Array.isArray(value)) return value.map((item) => this.serialize(item));
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [key, this.serialize(item)]),

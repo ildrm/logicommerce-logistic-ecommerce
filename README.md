@@ -42,14 +42,15 @@ The reverse proxy is the normal application entry point. MySQL, Redis, and
 MinIO API ports are exposed only in the development override.
 
 The idempotent seed creates tenant `platform-demo`, local-only admin
-`admin@demo.logicommerce.local`, read-only viewer
+`admin@demo.logicommerce.local`, customer test account
 `viewer@demo.logicommerce.local`, and an `isolation-test` tenant without a login
 identity. Both demo users use `ChangeMe-Local-Only-2026`. The Phase 1 API
 supports local and passwordless login, email verification/reset, token
 rotation, session revocation, TOTP/recovery MFA, trusted-host tenant resolution,
 Redis rate limiting, deny-by-default permissions, tenant role/user
-administration, and scoped machine credentials. The responsive account UI is
-available at `http://localhost:8080/account`.
+administration, tenant-controlled customer registration, and scoped machine
+credentials. The responsive account UI is available at
+`http://localhost:8080/account`; the seeded demo tenant permits registration.
 
 ## Local development
 
@@ -61,8 +62,8 @@ pnpm install --frozen-lockfile
 pnpm db:generate
 pnpm lint
 pnpm typecheck
-    pnpm test
-    pnpm test:coverage
+pnpm test
+pnpm test:coverage
 pnpm build
 pnpm test:network:live
 pnpm test:phase12:live

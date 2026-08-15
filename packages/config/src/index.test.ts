@@ -60,6 +60,15 @@ describe('parseEnvironment', () => {
     expect(parseEnvironment(valid).AUTH_LOGIN_RATE_LIMIT_MAX).toBe(10);
   });
 
+  it('accepts TLS Redis URLs and rejects malformed CORS origins', () => {
+    expect(
+      parseEnvironment({ ...valid, REDIS_URL: 'rediss://cache.example.com:6380' }).REDIS_URL,
+    ).toBe('rediss://cache.example.com:6380');
+    expect(() =>
+      parseEnvironment({ ...valid, CORS_ORIGINS: 'https://app.example.com/path' }),
+    ).toThrow('CORS_ORIGINS');
+  });
+
   it('rejects repository placeholders in production', () => {
     expect(() =>
       parseEnvironment({
@@ -86,6 +95,15 @@ describe('parseEnvironment', () => {
         PARTNER_WEBHOOK_ADAPTER: 'deterministic',
       }),
     ).toThrow('PARTNER_WEBHOOK_ADAPTER');
+  });
+
+  it('rejects the Coinbase sandbox endpoint in production', () => {
+    expect(() =>
+      parseEnvironment({
+        ...production,
+        COINBASE_API_BASE_URL: 'https://business.coinbase.com/sandbox/api/v1',
+      }),
+    ).toThrow('COINBASE_API_BASE_URL');
   });
 
   it('accepts a complete fail-closed production configuration', () => {

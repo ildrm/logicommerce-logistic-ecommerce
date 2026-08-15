@@ -15,4 +15,8 @@ export class TenancyService {
     if (!tenant) throw new NotFoundException('Resource not found');
     return tenant;
   }
+
+  async updateRegistration(enabled: boolean): Promise<TenantSummary> {
+    return this.tenants.updateRegistration(this.contexts.get(), enabled);
+  }
 }

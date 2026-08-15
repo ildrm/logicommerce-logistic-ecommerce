@@ -14,6 +14,7 @@ coverage-critical/
 packages/database/generated/
 playwright-report/
 test-results/
+*.tsbuildinfo
 .terraform/
 *.tfstate
 *.tfstate.*

@@ -1,5 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type {
   AuthSession,
   AuthenticationResult,
@@ -31,6 +39,27 @@ export class AuthService {
     private readonly tokens: AuthTokenService,
     private readonly mfa: MfaService,
   ) {}
+
+  async register(
+    context: TenantContext,
+    input: { email: string; displayName: string; password: string },
+    metadata: { readonly userAgent?: string; readonly ip?: string },
+  ): Promise<IssuedAuthentication> {
+    const email = input.email.trim().toLowerCase();
+    const registration = await this.store.registerCustomer(context, {
+      email,
+      displayName: input.displayName.trim(),
+      passwordHash: await this.passwords.hash(input.password),
+    });
+    if (registration.status !== 'created') {
+      if (registration.status === 'disabled') {
+        throw new ForbiddenException('Customer registration is not enabled for this tenant');
+      }
+      if (registration.status === 'exists') throw new ConflictException('User already exists');
+      throw new ServiceUnavailableException('Customer registration is temporarily unavailable');
+    }
+    return this.issue(context, registration.user, metadata, 'auth.registration.succeeded');
+  }
 
   async login(
     context: TenantContext,

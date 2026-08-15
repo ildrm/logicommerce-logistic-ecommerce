@@ -7,7 +7,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
+import {
+  safeIntegerNumber,
+  type DatabaseClient,
+  type Prisma,
+  type TenantContext,
+} from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
 import type {
@@ -464,12 +469,13 @@ export class FreightRepository {
       },
       include: { rules: { orderBy: { priority: 'asc' } } },
     });
-    const weightKg = Math.ceil(
-      request.cargoItems.reduce((sum, item) => sum + Number(item.weightGrams), 0) / 1000,
+    const weightGrams = request.cargoItems.reduce((sum, item) => sum + item.weightGrams, 0n);
+    const volumeCubicCm = request.cargoItems.reduce(
+      (sum, item) => sum + (item.volumeCubicCm ?? 0n),
+      0n,
     );
-    const volumeCubicM =
-      request.cargoItems.reduce((sum, item) => sum + Number(item.volumeCubicCm ?? 0), 0) /
-      1_000_000;
+    const weightKg = safeIntegerNumber((weightGrams + 999n) / 1_000n, 'Cargo weight');
+    const volumeCubicM = safeIntegerNumber(volumeCubicCm, 'Cargo volume') / 1_000_000;
     const candidates = cards.flatMap((card) =>
       card.rules
         .filter(
@@ -484,17 +490,19 @@ export class FreightRepository {
         )
         .map((rule) => {
           const calculated =
-            Number(rule.baseMinor) +
-            Number(rule.perKgMinor) * weightKg +
-            Number(rule.perCubicMeterMinor) * Math.ceil(volumeCubicM);
+            rule.baseMinor +
+            rule.perKgMinor * BigInt(weightKg) +
+            rule.perCubicMeterMinor * BigInt(Math.ceil(volumeCubicM));
           return {
             card,
             rule,
-            totalMinor: Math.max(Number(rule.minimumMinor), calculated),
+            totalMinor: rule.minimumMinor > calculated ? rule.minimumMinor : calculated,
           };
         }),
     );
-    candidates.sort((a, b) => a.totalMinor - b.totalMinor);
+    candidates.sort((a, b) =>
+      a.totalMinor === b.totalMinor ? 0 : a.totalMinor < b.totalMinor ? -1 : 1,
+    );
     const selected = candidates[0];
     const calculation = selected
       ? {
@@ -571,10 +579,10 @@ export class FreightRepository {
       throw new ConflictException('Net terms require a business account');
     }
     const subtotalMinor = input.lines.reduce(
-      (sum, line) => sum + line.quantity * line.unitMinor,
-      0,
+      (sum, line) => sum + BigInt(line.quantity) * BigInt(line.unitMinor),
+      0n,
     );
-    const totalMinor = subtotalMinor + input.taxMinor;
+    const totalMinor = subtotalMinor + BigInt(input.taxMinor);
     const latest = await this.db.freightQuote.aggregate({
       where: { tenantId: context.tenantId, requestId },
       _max: { revision: true },
@@ -611,7 +619,7 @@ export class FreightRepository {
               description: line.description,
               quantity: line.quantity,
               unitMinor: line.unitMinor,
-              totalMinor: line.quantity * line.unitMinor,
+              totalMinor: BigInt(line.quantity) * BigInt(line.unitMinor),
               taxable: line.taxable ?? true,
               metadata: (line.metadata ?? null) as Prisma.InputJsonValue,
             })),
@@ -702,13 +710,15 @@ export class FreightRepository {
           businessAccountId: account.id,
           status: { in: ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'] },
         },
-        _sum: { totalMinor: true, paidMinor: true },
+        _sum: { totalMinor: true, paidMinor: true, creditedMinor: true },
       });
       const openMinor =
-        Number(exposure._sum.totalMinor ?? 0n) - Number(exposure._sum.paidMinor ?? 0n);
+        (exposure._sum.totalMinor ?? 0n) -
+        (exposure._sum.paidMinor ?? 0n) -
+        (exposure._sum.creditedMinor ?? 0n);
       if (
         account.creditLimitMinor > 0n &&
-        openMinor + Number(quote.totalMinor) > Number(account.creditLimitMinor)
+        openMinor + quote.totalMinor > account.creditLimitMinor
       ) {
         throw new ConflictException('Business credit limit would be exceeded');
       }
@@ -1316,9 +1326,10 @@ export class FreightRepository {
     policy: string,
     now: Date,
   ) {
-    const total = Number(quote.totalMinor);
+    const total = quote.totalMinor;
     if (policy === 'DEPOSIT') {
-      const deposit = Math.ceil((total * (quote.depositPercent ?? 100)) / 100);
+      const percent = BigInt(quote.depositPercent ?? 100);
+      const deposit = (total * percent + 99n) / 100n;
       return [
         {
           id: randomUUID(),

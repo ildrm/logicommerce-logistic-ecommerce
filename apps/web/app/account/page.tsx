@@ -124,6 +124,33 @@ export default function AccountPage() {
     }
   }
 
+  async function register(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage('');
+    const form = new FormData(event.currentTarget);
+    try {
+      const result = (await request(
+        '/auth/register',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            email: form.get('email'),
+            displayName: form.get('displayName'),
+            password: form.get('password'),
+          }),
+        },
+        '',
+      )) as { accessToken: string };
+      window.sessionStorage.setItem('logicommerce_access', result.accessToken);
+      await hydrate(result.accessToken);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Registration failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function requestReset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const email = new FormData(event.currentTarget).get('resetEmail');
@@ -296,6 +323,35 @@ export default function AccountPage() {
             </label>
             <button disabled={busy} type="submit">
               {busy ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+          <form
+            className="panel"
+            onSubmit={(event) => void register(event)}
+            aria-labelledby="registration-title"
+          >
+            <h2 id="registration-title">Create customer account</h2>
+            <p>Available when this tenant has enabled public customer registration.</p>
+            <label>
+              Display name
+              <input name="displayName" autoComplete="name" minLength={2} required />
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" autoComplete="email" required />
+            </label>
+            <label>
+              Password
+              <input
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                minLength={12}
+                required
+              />
+            </label>
+            <button disabled={busy} type="submit">
+              Create account
             </button>
           </form>
           <form

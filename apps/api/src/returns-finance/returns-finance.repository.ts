@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
+import {
+  safeIntegerNumber,
+  type DatabaseClient,
+  type Prisma,
+  type TenantContext,
+} from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
 import type {
@@ -132,12 +137,12 @@ export class ReturnsFinanceRepository {
     if (input.lines.length !== record.lines.length)
       throw new ConflictException('Inspection must resolve every return line');
     return this.db.$transaction(async (tx) => {
-      let refundMinor = 0;
+      let refundMinor = 0n;
       for (const resolution of input.lines) {
         const line = record.lines.find((candidate) => candidate.id === resolution.lineId);
         if (!line || line.receivedQuantity !== line.quantity)
           throw new ConflictException('Every returned unit must be received before resolution');
-        refundMinor += resolution.refundMinor;
+        refundMinor += BigInt(resolution.refundMinor);
         await tx.returnLine.update({
           where: { id: line.id },
           data: {
@@ -202,7 +207,8 @@ export class ReturnsFinanceRepository {
           note: input.note ?? null,
         },
       });
-      if (refundMinor > 0) {
+      if (refundMinor > 0n) {
+        const refundAmount = safeIntegerNumber(refundMinor, 'Return refund');
         const [refundAccount, cashAccount] = await Promise.all([
           tx.financialAccount.findFirst({
             where: { tenantId: context.tenantId, code: '5000', currency: 'USD' },
@@ -220,8 +226,8 @@ export class ReturnsFinanceRepository {
           currency: 'USD',
           idempotencyKey: `return:${record.id}:refund`,
           lines: [
-            { accountId: refundAccount.id, debitMinor: refundMinor, creditMinor: 0 },
-            { accountId: cashAccount.id, debitMinor: 0, creditMinor: refundMinor },
+            { accountId: refundAccount.id, debitMinor: refundAmount, creditMinor: 0 },
+            { accountId: cashAccount.id, debitMinor: 0, creditMinor: refundAmount },
           ],
         });
       }
@@ -280,8 +286,8 @@ export class ReturnsFinanceRepository {
         reversalOfId: entry.id,
         lines: entry.lines.map((line) => ({
           accountId: line.accountId,
-          debitMinor: Number(line.creditMinor),
-          creditMinor: Number(line.debitMinor),
+          debitMinor: safeIntegerNumber(line.creditMinor, 'Journal credit'),
+          creditMinor: safeIntegerNumber(line.debitMinor, 'Journal debit'),
           memo: `Reversal of ${entry.number}`,
         })),
       }),
@@ -317,14 +323,13 @@ export class ReturnsFinanceRepository {
         sum +
         journal.lines.reduce(
           (lineSum, line) =>
-            lineSum +
-            (line.account.code === '2000' ? Number(line.creditMinor) - Number(line.debitMinor) : 0),
-          0,
+            lineSum + (line.account.code === '2000' ? line.creditMinor - line.debitMinor : 0n),
+          0n,
         ),
-      0,
+      0n,
     );
-    const fees = Math.max(0, Math.floor(gross * 0.03));
-    const net = gross - fees - input.reserveMinor + input.adjustmentMinor;
+    const fees = gross > 0n ? (gross * 3n) / 100n : 0n;
+    const net = gross - fees - BigInt(input.reserveMinor) + BigInt(input.adjustmentMinor);
     return this.db.settlement.create({
       data: {
         id: randomUUID(),
@@ -347,11 +352,8 @@ export class ReturnsFinanceRepository {
             kind: journal.sourceType,
             amountMinor: journal.lines.reduce(
               (sum, line) =>
-                sum +
-                (line.account.code === '2000'
-                  ? Number(line.creditMinor) - Number(line.debitMinor)
-                  : 0),
-              0,
+                sum + (line.account.code === '2000' ? line.creditMinor - line.debitMinor : 0n),
+              0n,
             ),
           })),
         },
@@ -421,9 +423,9 @@ export class ReturnsFinanceRepository {
     principal: AuthPrincipal,
     input: PostJournalDto & { reversalOfId?: string },
   ): Promise<unknown> {
-    const debit = input.lines.reduce((sum, line) => sum + line.debitMinor, 0);
-    const credit = input.lines.reduce((sum, line) => sum + line.creditMinor, 0);
-    if (debit <= 0 || debit !== credit)
+    const debit = input.lines.reduce((sum, line) => sum + BigInt(line.debitMinor), 0n);
+    const credit = input.lines.reduce((sum, line) => sum + BigInt(line.creditMinor), 0n);
+    if (debit <= 0n || debit !== credit)
       throw new ConflictException('Journal debits and credits must be equal and non-zero');
     if (input.lines.some((line) => line.debitMinor > 0 === line.creditMinor > 0))
       throw new ConflictException('Each journal line must contain exactly one side');

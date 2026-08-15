@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parseEnv } from 'node:util';
 import { z } from 'zod';
 
 const booleanText = z.enum(['true', 'false']).transform((value) => value === 'true');
@@ -14,7 +17,9 @@ const baseEnvironmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().positive().default(3001),
   DATABASE_URL: z.string().startsWith('mysql://'),
-  REDIS_URL: z.string().startsWith('redis://'),
+  REDIS_URL: z.string().refine((value) => /^rediss?:\/\//u.test(value), {
+    message: 'must use redis:// or rediss://',
+  }),
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_PEPPER: z.string().min(32),
   FIELD_ENCRYPTION_KEY: z.string().min(32),
@@ -35,6 +40,9 @@ const baseEnvironmentSchema = z.object({
   COINBASE_API_KEY_ID: optionalSecret(3),
   COINBASE_API_KEY_SECRET: optionalSecret(8),
   COINBASE_WEBHOOK_SECRET: optionalSecret(8),
+  COINBASE_API_BASE_URL: z
+    .enum(['https://business.coinbase.com/api/v1', 'https://business.coinbase.com/sandbox/api/v1'])
+    .default('https://business.coinbase.com/api/v1'),
   COMMERCE_ADAPTER: z.enum(['deterministic', 'http']).default('deterministic'),
   COMMERCE_PROVIDER_URL: optionalUrl,
   COMMERCE_PROVIDER_TOKEN: optionalSecret(24),
@@ -105,6 +113,30 @@ function requireField(
 }
 
 export const environmentSchema = baseEnvironmentSchema.superRefine((environment, issue) => {
+  const origins = environment.CORS_ORIGINS.split(',').map((origin) => origin.trim());
+  for (const origin of origins) {
+    try {
+      const parsed = new URL(origin);
+      if (
+        !['http:', 'https:'].includes(parsed.protocol) ||
+        parsed.username ||
+        parsed.password ||
+        parsed.pathname !== '/' ||
+        parsed.search ||
+        parsed.hash
+      ) {
+        throw new Error('invalid origin');
+      }
+    } catch {
+      issue.addIssue({
+        code: 'custom',
+        path: ['CORS_ORIGINS'],
+        message: 'must contain only comma-separated HTTP origins without paths or credentials',
+      });
+      break;
+    }
+  }
+
   if (environment.NODE_ENV !== 'production') return;
 
   for (const key of [
@@ -148,7 +180,6 @@ export const environmentSchema = baseEnvironmentSchema.superRefine((environment,
       message: 'must use https in production',
     });
   }
-  const origins = environment.CORS_ORIGINS.split(',').map((origin) => origin.trim());
   if (origins.some((origin) => !origin.startsWith('https://'))) {
     issue.addIssue({
       code: 'custom',
@@ -171,6 +202,13 @@ export const environmentSchema = baseEnvironmentSchema.superRefine((environment,
     requireField(issue, environment, 'COINBASE_API_KEY_ID');
     requireField(issue, environment, 'COINBASE_API_KEY_SECRET');
     requireField(issue, environment, 'COINBASE_WEBHOOK_SECRET');
+  }
+  if (environment.COINBASE_API_BASE_URL !== 'https://business.coinbase.com/api/v1') {
+    issue.addIssue({
+      code: 'custom',
+      path: ['COINBASE_API_BASE_URL'],
+      message: 'must use the production Coinbase endpoint in production',
+    });
   }
   for (const [adapterKey, urlKey, tokenKey] of [
     ['COMMERCE_ADAPTER', 'COMMERCE_PROVIDER_URL', 'COMMERCE_PROVIDER_TOKEN'],
@@ -226,6 +264,16 @@ export const environmentSchema = baseEnvironmentSchema.superRefine((environment,
 });
 
 export type Environment = z.infer<typeof environmentSchema>;
+
+export function loadEnvironmentFiles(cwd = process.cwd()): void {
+  for (const candidate of [resolve(cwd, '.env'), resolve(cwd, '..', '..', '.env')]) {
+    if (!existsSync(candidate)) continue;
+    const values = parseEnv(readFileSync(candidate, 'utf8'));
+    for (const [key, value] of Object.entries(values)) {
+      if (process.env[key] === undefined) process.env[key] = value;
+    }
+  }
+}
 
 export function parseEnvironment(source: NodeJS.ProcessEnv): Environment {
   const result = environmentSchema.safeParse(source);

@@ -26,6 +26,16 @@ work is recorded under `Unreleased` rather than rewriting historical limits.
 
 ### Added
 
+- Tenant-controlled customer self-registration, a least-privilege customer
+  role, an account registration UI, and live registration/duplicate-user
+  acceptance coverage.
+- Exact integer money handling across commerce, freight, billing, finance, and
+  analytics boundaries, plus request/response guards for unsafe JSON integers.
+- Readiness checks for MySQL and Redis, worker retry/startup hardening, root
+  environment loading, trusted-proxy restrictions, and cross-platform LF
+  normalization.
+- Billing credit allocation, refund reconciliation, invoice/schedule reopening,
+  and balanced refund and credit-note journals.
 - Production provider adapters and fail-closed configuration for commerce,
   carriers, KYC, C2C escrow, document scanning, SMTP, and partner webhooks.
 - Durable C2C hold-release processing, checksum/length-bound freight uploads,
@@ -107,6 +117,20 @@ work is recorded under `Unreleased` rather than rewriting historical limits.
 - Customer freight and operator freight, dispatch, billing, and analytical
   dashboard workspaces, including a chronological milestone timeline.
 
+### Fixed
+
+- Updated Coinbase Business checkout, refund, webhook-signature, event identity,
+  and sandbox behavior to the current API contract; added Stripe asynchronous
+  payment completion handling and strict malformed-webhook rejection.
+- Prevented precision loss when Prisma `BigInt` money and quantity values cross
+  arithmetic, event, API, and PDF boundaries.
+- Prevented credit notes and refunds from leaving invoices, payment schedules,
+  allocations, or double-entry journals inconsistent.
+- Removed the C2C onboarding dead end by making customer registration an
+  explicit, tenant-controlled flow.
+- Removed a high-severity transitive `nanoid` advisory and stopped tracking the
+  generated Next.js TypeScript build cache.
+
 ### Validated
 
 - Production-hardening repository gates on 2026-08-10: formatting, 18/18 lint,
@@ -159,9 +183,11 @@ work is recorded under `Unreleased` rather than rewriting historical limits.
   and an active malware scanner remain integration work.
 - Freight tracking is an ordered operational milestone timeline. It does not
   claim continuous GPS tracking or a unified quote/payment/travel audit feed.
-- Authorized CI scan/SBOM output, measured domain-critical coverage, external
-  penetration testing, and a production-provider restore exercise remain
-  release evidence.
+- Domain-critical unit coverage is measured at 98.87% lines and 86.58%
+  branches, but whole-API line coverage remains 12.50%; broader service and
+  repository unit coverage is still required.
+- Authorized CI scan/SBOM output, external penetration testing, and a
+  production-provider restore exercise remain release evidence.
 
 ## 0.1.0-foundation — 2026-07-21
 

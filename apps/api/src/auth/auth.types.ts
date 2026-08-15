@@ -31,7 +31,15 @@ export type StoredSession = {
   readonly expiresAt: Date;
 };
 
+export type CustomerRegistration =
+  | { readonly status: 'created'; readonly user: AuthenticatedUser }
+  | { readonly status: 'disabled' | 'exists' | 'unavailable' };
+
 export interface AuthStore {
+  registerCustomer(
+    context: TenantContext,
+    input: { email: string; displayName: string; passwordHash: string },
+  ): Promise<CustomerRegistration>;
   findPasswordUser(context: TenantContext, email: string): Promise<PasswordUser | null>;
   findUserById(context: TenantContext, userId: string): Promise<AuthenticatedUser | null>;
   createSession(

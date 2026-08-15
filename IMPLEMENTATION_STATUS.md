@@ -1,6 +1,6 @@
 # Implementation status
 
-Last evidence update: **2026-08-10**. See the
+Last evidence update: **2026-08-16**. See the
 [verification record](docs/testing/verification-record.md) for commands and
 runtime results, and the
 [continuation guide](docs/development/continuation-guide.md) for the exact next
@@ -36,12 +36,32 @@ checksum-and-length-bound staged uploads, durable C2C hold release, provider
 HTTP limits, frontend token refresh, and production CI/Compose gates.
 
 The repository is a **release candidate**, not an approved production release.
-The measured whole-API coverage baseline is 10.55% lines, below the 80%
-domain-critical release target. Provider sandbox certification, licensed data
-and agreements, external penetration and regulatory review, backup/restore
-drills, secrets/telemetry/on-call integration, and an authorized green CI run
-remain release evidence. Continuous GPS and tenant-level freight feature-flag
-policy remain explicit product/deployment decisions.
+The measured whole-API unit baseline is 12.50% lines. The focused
+domain-critical gate now covers webhook authenticity and numeric-boundary code
+at 98.87% lines and 86.58% branches, but the broader unit baseline remains too
+shallow for production assurance. Provider sandbox certification, licensed
+data and agreements, external penetration and regulatory review,
+backup/restore drills, secrets/telemetry/on-call integration, and an authorized
+green CI run remain release evidence. Continuous GPS and tenant-level freight
+feature-flag policy remain explicit product/deployment decisions.
+
+## Repository audit and remediation — 2026-08-16
+
+- Added tenant-controlled customer registration and a least-privilege customer
+  role, closing the documented C2C/B2C onboarding gap without enabling open
+  registration by default.
+- Corrected Coinbase checkout/refund/webhook behavior, Stripe asynchronous
+  events, durable refund reconciliation, payment-schedule reopening, credit
+  allocation, and balanced refund/credit-note accounting.
+- Replaced unsafe `BigInt` conversions in money and quantity paths with exact
+  arithmetic and checked API/event serialization boundaries.
+- Hardened environment discovery, CORS and proxy trust, dependency health,
+  worker startup/retry behavior, Redis TLS configuration, line endings,
+  generated artifacts, product-image fallback, and production web assets.
+- Static, unit, coverage, audit, release-evidence, build, and Compose-render
+  gates pass. The live Docker-backed regression could not be rerun because the
+  local Docker Desktop WSL engine failed during bootstrap; no live result is
+  claimed for this audit. See the verification record and repository audit.
 
 ## Production release hardening — 2026-08-10
 

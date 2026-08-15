@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { DatabaseClient, TenantContext } from '@logicommerce/database';
+import { safeIntegerNumber, type DatabaseClient, type TenantContext } from '@logicommerce/database';
 import { DATABASE } from '../database/database.module.js';
 
 type Severity = 'critical' | 'high' | 'medium' | 'info';
@@ -17,7 +17,16 @@ const TERMINAL_FULFILLMENT = new Set(['DELIVERED', 'CANCELLED']);
 const TERMINAL_RETURN = new Set(['RESOLVED', 'REJECTED', 'CANCELLED']);
 
 function asNumber(value: bigint | number | null | undefined): number {
-  return Number(value ?? 0);
+  return safeIntegerNumber(value ?? 0, 'Analytics value');
+}
+
+function addAnalytics(left: number, right: number): number {
+  return safeIntegerNumber(BigInt(left) + BigInt(right), 'Analytics aggregate');
+}
+
+function outstanding(total: bigint, paid: bigint, credited: bigint): number {
+  const value = total - paid - credited;
+  return value > 0n ? safeIntegerNumber(value, 'Outstanding receivable') : 0;
 }
 
 function percentage(total: number, exceptions: number): number | null {
@@ -209,7 +218,13 @@ export class AnalyticsRepository {
       }),
       this.db.billingInvoice.findMany({
         where: { tenantId },
-        select: { status: true, totalMinor: true, paidMinor: true, dueAt: true },
+        select: {
+          status: true,
+          totalMinor: true,
+          paidMinor: true,
+          creditedMinor: true,
+          dueAt: true,
+        },
         take: 5_000,
       }),
       this.db.paymentSession.groupBy({
@@ -273,21 +288,22 @@ export class AnalyticsRepository {
         !TERMINAL_RETURN.has(item.status) && now.getTime() - item.createdAt.getTime() > 7 * DAY,
     ).length;
     const reconciliationDifference = reconciliations.reduce(
-      (sum, item) => sum + Math.abs(asNumber(item.differenceMinor)),
+      (sum, item) => addAnalytics(sum, Math.abs(asNumber(item.differenceMinor))),
       0,
     );
     const settlementExposure = settlements
       .filter((item) => item.status !== 'PAID')
-      .reduce((sum, item) => sum + asNumber(item.netMinor), 0);
+      .reduce((sum, item) => addAnalytics(sum, asNumber(item.netMinor)), 0);
     const inventoryByState = Object.fromEntries(
       inventory.map((item) => [item.state, asNumber(item._sum.quantity)]),
     ) as Record<string, number>;
-    const inventoryRisk =
-      (inventoryByState.BACKORDERED ?? 0) +
-      (inventoryByState.QUARANTINED ?? 0) +
-      (inventoryByState.DAMAGED ?? 0) +
-      (inventoryByState.LOST ?? 0) +
-      (inventoryByState.EXPIRED ?? 0);
+    const inventoryRisk = [
+      inventoryByState.BACKORDERED ?? 0,
+      inventoryByState.QUARANTINED ?? 0,
+      inventoryByState.DAMAGED ?? 0,
+      inventoryByState.LOST ?? 0,
+      inventoryByState.EXPIRED ?? 0,
+    ].reduce(addAnalytics, 0);
     const paymentSessionCounts = Object.fromEntries(
       paymentSessions.map((item) => [item.status, item._count._all]),
     ) as Record<string, number>;
@@ -322,7 +338,10 @@ export class AnalyticsRepository {
       .filter((invoice) => invoice.status !== 'PAID' && invoice.dueAt < now)
       .reduce(
         (sum, invoice) =>
-          sum + Math.max(0, asNumber(invoice.totalMinor) - asNumber(invoice.paidMinor)),
+          addAnalytics(
+            sum,
+            outstanding(invoice.totalMinor, invoice.paidMinor, invoice.creditedMinor),
+          ),
         0,
       );
     const paymentBlocks = paymentSessionCounts.FAILED ?? 0;
@@ -544,7 +563,10 @@ export class AnalyticsRepository {
       return sum + Math.min(20, weight + Math.log10(signal.count + 1) * weight);
     }, 0);
     const healthScore = Math.max(0, Math.round((100 - scorePenalty) * 10) / 10);
-    const orderGmvMinor = orderRows.reduce((sum, order) => sum + asNumber(order.totalMinor), 0);
+    const orderGmvMinor = orderRows.reduce(
+      (sum, order) => addAnalytics(sum, asNumber(order.totalMinor)),
+      0,
+    );
     const cancelledOrders = orderRows.filter((order) => order.status === 'CANCELLED').length;
     const delivered = shipments.filter((shipment) => shipment.status === 'DELIVERED').length;
     const settlementIssues =
@@ -723,7 +745,7 @@ export class AnalyticsRepository {
       ],
       inventory: {
         states: inventoryByState,
-        totalUnits: Object.values(inventoryByState).reduce((sum, value) => sum + value, 0),
+        totalUnits: Object.values(inventoryByState).reduce(addAnalytics, 0),
         riskUnits: inventoryRisk,
       },
       finance: {
@@ -731,8 +753,14 @@ export class AnalyticsRepository {
         gmvMinor: orderGmvMinor,
         settlementExposureMinor: settlementExposure,
         reconciliationDifferenceMinor: reconciliationDifference,
-        reservesMinor: settlements.reduce((sum, item) => sum + asNumber(item.reserveMinor), 0),
-        feesMinor: settlements.reduce((sum, item) => sum + asNumber(item.feesMinor), 0),
+        reservesMinor: settlements.reduce(
+          (sum, item) => addAnalytics(sum, asNumber(item.reserveMinor)),
+          0,
+        ),
+        feesMinor: settlements.reduce(
+          (sum, item) => addAnalytics(sum, asNumber(item.feesMinor)),
+          0,
+        ),
       },
       network: {
         optimizationRuns,

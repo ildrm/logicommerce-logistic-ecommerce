@@ -6,7 +6,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
+import {
+  safeIntegerNumber,
+  type DatabaseClient,
+  type Prisma,
+  type TenantContext,
+} from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
 import { nextInvoiceNumber } from '../billing/invoice-issuance.js';
@@ -139,7 +144,10 @@ export class B2BRepository {
         orderBy: [{ variantId: 'asc' }, { minimumQuantity: 'desc' }],
       })
       .then((prices) =>
-        prices.map((price) => ({ ...price, unitPriceMinor: Number(price.unitPriceMinor) })),
+        prices.map((price) => ({
+          ...price,
+          unitPriceMinor: safeIntegerNumber(price.unitPriceMinor, 'Contract price'),
+        })),
       );
   }
 
@@ -231,7 +239,10 @@ export class B2BRepository {
         tenantId: context.tenantId,
         rfqId,
         sellerId,
-        totalMinor: quoted.reduce((sum, line) => sum + line.unitPriceMinor * line.quantity, 0),
+        totalMinor: quoted.reduce(
+          (sum, line) => sum + BigInt(line.unitPriceMinor) * BigInt(line.quantity),
+          0n,
+        ),
         validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000),
         terms: (input.terms ?? null) as Prisma.InputJsonValue,
         lines: {

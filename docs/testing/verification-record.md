@@ -645,6 +645,32 @@ measured coverage report, and broad domain coverage remains Phase 11 work.
   external credentials, agreements, licensed data, and jurisdiction-specific
   evidence.
 
+## 2026-08-16 repository-wide audit and remediation
+
+- Reviewed the monorepo architecture, package scripts, application/domain
+  boundaries, Prisma schema and migrations, provider adapters, ingress,
+  worker, web journeys, CI/release gates, product documentation, and Git
+  history. Findings and dispositions are recorded in
+  [repository-audit-2026-08-16.md](repository-audit-2026-08-16.md).
+- `pnpm exec turbo typecheck --output-logs=errors-only`, `pnpm lint`,
+  `pnpm test`, `pnpm format:check`, and `pnpm build` passed. The unit pipeline
+  completed 18/18 tasks; API tests completed 19 files and 54 assertions; the
+  production build completed 12/12 tasks and prerendered 18 web routes.
+- `pnpm test:coverage` passed with 12.50% whole-API line coverage.
+  `pnpm test:coverage:critical` passed 20 tests across six files at 98.87%
+  lines, 94.05% statements, 86.58% branches, and 95.83% functions.
+- `pnpm audit --prod --audit-level high` reported no known vulnerabilities.
+  `pnpm test:release-evidence` passed 2/2 checks. Production Compose rendering
+  with `infrastructure/production.env.example` also passed.
+- A full Compose rebuild was attempted after Docker Desktop was started. Image
+  transfer ended with BuildKit `EOF`; Docker Desktop then consistently failed
+  to start its WSL engine with `DockerDesktop/Wsl/ExecError` and exit status
+  `0xc00000fd`. Therefore migrations, seed, live API journeys, and Playwright
+  were not rerun, and this entry makes no new Docker-backed runtime claim.
+- External Stripe/Coinbase sandbox certification, provider agreements and
+  licensed data, external penetration/regulatory review, authorized CI/SBOM
+  evidence, and a production restore drill remain release prerequisites.
+
 ## How to add a new verification entry
 
 Record the date, commit SHA, environment, exact commands, results, relevant

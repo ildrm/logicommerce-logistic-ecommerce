@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import { safeIntegerNumber } from '@logicommerce/database';
 
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -45,10 +46,12 @@ export class DeterministicOptimizerService {
       )
       .map((lane) => ({
         lane,
-        score:
-          lane.costMinor * weights.cost +
-          lane.carbonGrams * weights.carbon +
-          lane.slaHours * weights.sla,
+        score: safeIntegerNumber(
+          BigInt(lane.costMinor) * BigInt(weights.cost) +
+            BigInt(lane.carbonGrams) * BigInt(weights.carbon) +
+            BigInt(lane.slaHours) * BigInt(weights.sla),
+          'Optimization score',
+        ),
       }))
       .sort(
         (left, right) =>

@@ -226,6 +226,7 @@ model Tenant {
   status               TenantStatus            @default(ACTIVE)
   defaultLocale        String                  @default("en") @db.VarChar(20)
   defaultCurrency      String                  @default("USD") @db.Char(3)
+  selfRegistrationEnabled Boolean              @default(false)
   version              Int                     @default(1)
   createdAt            DateTime                @default(now()) @db.DateTime(3)
   updatedAt            DateTime                @updatedAt @db.DateTime(3)
@@ -2677,6 +2678,7 @@ model BillingInvoice {
   taxMinor          BigInt                   @default(0)
   totalMinor        BigInt
   paidMinor         BigInt                   @default(0)
+  creditedMinor     BigInt                   @default(0)
   billingSnapshot   Json
   issuedAt          DateTime                 @default(now()) @db.DateTime(3)
   dueAt             DateTime                 @db.DateTime(3)
@@ -2721,6 +2723,7 @@ model InvoicePaymentSchedule {
   kind        String              @db.VarChar(40)
   amountMinor BigInt
   paidMinor   BigInt              @default(0)
+  creditedMinor BigInt            @default(0)
   dueAt       DateTime            @db.DateTime(3)
   status      String              @default("DUE") @db.VarChar(40)
   sequence    Int

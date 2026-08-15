@@ -6,18 +6,21 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
-import { parseEnvironment } from '@logicommerce/config';
+import { loadEnvironmentFiles, parseEnvironment } from '@logicommerce/config';
 import { createLogger } from '@logicommerce/observability';
 import { AppModule } from './app.module.js';
 import { JsonSafeInterceptor } from './platform/json-safe.interceptor.js';
 import { ProblemDetailsFilter } from './platform/problem-details.filter.js';
+import { SafeIntegerPipe } from './platform/safe-integer.pipe.js';
 
 async function bootstrap() {
+  loadEnvironmentFiles();
   const environment = parseEnvironment(process.env);
   const logger = createLogger('api');
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({
+      trustProxy: ['loopback', 'linklocal', 'uniquelocal'],
       bodyLimit: 1_048_576,
       requestTimeout: 30_000,
       connectionTimeout: 10_000,
@@ -43,7 +46,7 @@ async function bootstrap() {
         : false,
   });
   await app.register(cors, {
-    origin: environment.CORS_ORIGINS.split(',').map((origin) => origin.trim()),
+    origin: environment.CORS_ORIGINS.split(',').map((origin) => new URL(origin.trim()).origin),
     credentials: true,
   });
 
@@ -60,6 +63,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(
+    new SafeIntegerPipe(),
     new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
   );
   app.useGlobalFilters(new ProblemDetailsFilter(logger));

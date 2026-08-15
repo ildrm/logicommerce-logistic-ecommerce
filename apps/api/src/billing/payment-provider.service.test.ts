@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentProviderService } from './payment-provider.service.js';
 
 const originalEnvironment = { ...process.env };
@@ -23,6 +23,7 @@ function configure(overrides: Record<string, string> = {}) {
 describe('PaymentProviderService', () => {
   beforeEach(() => configure());
   afterEach(() => {
+    vi.unstubAllGlobals();
     for (const key of Object.keys(process.env)) {
       if (!(key in originalEnvironment)) delete process.env[key];
     }
@@ -55,6 +56,7 @@ describe('PaymentProviderService', () => {
       .update(`${timestamp}.${body}`)
       .digest('hex');
     expect(service.verifyStripe(body, `t=${timestamp},v1=${signature}`)).toBe(true);
+    expect(service.verifyStripe(body, `t=${timestamp},v1=retired,v1=${signature}`)).toBe(true);
     expect(service.verifyStripe(`${body}x`, `t=${timestamp},v1=${signature}`)).toBe(false);
     expect(service.verifyStripe(body, `t=${timestamp - 600},v1=${signature}`)).toBe(false);
   });
@@ -77,5 +79,76 @@ describe('PaymentProviderService', () => {
         headers,
       ),
     ).toBe(false);
+    const legacy = createHmac('sha256', 'coinbase-webhook-secret')
+      .update(`${timestamp}.${body}`)
+      .digest('hex');
+    expect(service.verifyCoinbase(body, `t=${timestamp},v1=${legacy}`, headers)).toBe(false);
+  });
+
+  it('uses the Coinbase sandbox URL and a deterministic UUIDv4 idempotency key', async () => {
+    configure({
+      PAYMENT_ADAPTER: 'coinbase',
+      COINBASE_API_KEY_ID: 'key-id',
+      COINBASE_API_KEY_SECRET: 'test-secret',
+      COINBASE_API_BASE_URL: 'https://business.coinbase.com/sandbox/api/v1',
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: '68f7a946db0529ea9b6d3a12',
+          url: 'https://payments.coinbase.com/payment-links/test',
+          expiresAt: '2026-12-31T23:59:59Z',
+        }),
+        { status: 201, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const service = new PaymentProviderService();
+    Object.assign(service, { coinbaseJwt: () => 'test-jwt' });
+
+    await service.createSession({
+      provider: 'COINBASE',
+      idempotencyKey: 'customer-supplied-key',
+      amountMinor: 12_500,
+      currency: 'USD',
+      invoiceId: '00000000-0000-4000-8000-000000000001',
+      invoiceNumber: 'INV-2026-000001',
+    });
+
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://business.coinbase.com/sandbox/api/v1/checkouts');
+    expect(new Headers(request.headers).get('x-idempotency-key')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+    );
+  });
+
+  it('calls the singular Coinbase refund endpoint and reads the nested refund result', async () => {
+    configure({
+      PAYMENT_ADAPTER: 'coinbase',
+      COINBASE_API_KEY_ID: 'key-id',
+      COINBASE_API_KEY_SECRET: 'test-secret',
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ refund: { id: 'refund-1', status: 'PENDING' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const service = new PaymentProviderService();
+    Object.assign(service, { coinbaseJwt: () => 'test-jwt' });
+
+    const result = await service.refund({
+      provider: 'COINBASE',
+      providerReference: '68f7a946db0529ea9b6d3a12',
+      amountMinor: 2_500,
+      reason: 'Customer request',
+      idempotencyKey: 'refund-request-key',
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'https://business.coinbase.com/api/v1/checkouts/68f7a946db0529ea9b6d3a12/refund',
+    );
+    expect(result).toEqual({ reference: 'refund-1', status: 'PENDING' });
   });
 });

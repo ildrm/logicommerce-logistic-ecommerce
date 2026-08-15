@@ -44,7 +44,7 @@ export class AuthRateLimitService {
     context: TenantContext,
     email: string,
     ip: string,
-    purpose: 'EMAIL_VERIFICATION' | 'PASSWORD_RESET' | 'PASSWORDLESS_LOGIN',
+    purpose: 'EMAIL_VERIFICATION' | 'PASSWORD_RESET' | 'PASSWORDLESS_LOGIN' | 'REGISTRATION',
   ): Promise<void> {
     await this.consume(
       `auth:recovery:${purpose}:account:${this.hash(`${context.tenantId}:${email.trim().toLowerCase()}`)}`,

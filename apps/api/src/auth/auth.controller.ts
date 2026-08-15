@@ -32,6 +32,7 @@ import {
   ResetPasswordDto,
 } from './recovery.dto.js';
 import { RecoveryService } from './recovery.service.js';
+import { RegistrationDto } from './registration.dto.js';
 
 @ApiTags('authentication')
 @Controller({ path: 'auth', version: '1' })
@@ -44,6 +45,27 @@ export class AuthController {
     private readonly mfa: MfaService,
     private readonly recovery: RecoveryService,
   ) {}
+
+  @Post('register')
+  @ApiOperation({ summary: 'Create a customer account when tenant registration is enabled' })
+  async register(
+    @Body() input: RegistrationDto,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) response: FastifyReply,
+  ): Promise<AuthenticationResult> {
+    await this.rateLimits.assertRecoveryAllowed(
+      this.contexts.get(),
+      input.email,
+      request.ip,
+      'REGISTRATION',
+    );
+    const result = await this.auth.register(this.contexts.get(), input, {
+      ...(request.headers['user-agent'] ? { userAgent: request.headers['user-agent'] } : {}),
+      ip: request.ip,
+    });
+    void response.header('set-cookie', this.tokens.refreshCookie(result.refreshToken));
+    return this.publicResult(result);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)

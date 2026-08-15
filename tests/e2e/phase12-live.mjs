@@ -312,6 +312,46 @@ assert.equal(invoiceDocument.status, 200);
 assert.equal(invoiceDocument.headers.get('content-type'), 'application/pdf');
 assert.equal((await invoiceDocument.arrayBuffer()).byteLength > 100, true);
 
+const refund = await json(
+  await api(`/billing/operations/payments/${payment.id}/refunds`, admin, {
+    method: 'POST',
+    headers: { 'idempotency-key': `phase12-refund-${suffix}` },
+    body: JSON.stringify({ amountMinor: 10_000, reason: 'Live partial-refund drill' }),
+  }),
+  201,
+);
+assert.equal(refund.status, 'COMPLETED');
+const reopenedInvoice = await json(
+  await api(`/billing/invoices/${accepted.invoice.id}`, admin),
+  200,
+);
+assert.equal(reopenedInvoice.paidMinor, 117_500);
+assert.equal(reopenedInvoice.schedules[0].status, 'PARTIALLY_PAID');
+
+const creditNote = await json(
+  await api(`/billing/operations/invoices/${accepted.invoice.id}/credit-notes`, admin, {
+    method: 'POST',
+    body: JSON.stringify({ amountMinor: 10_000, reason: 'Live refund credit note' }),
+  }),
+  201,
+);
+const settledInvoice = await json(
+  await api(`/billing/invoices/${accepted.invoice.id}`, admin),
+  200,
+);
+assert.equal(settledInvoice.creditedMinor, 10_000);
+assert.equal(settledInvoice.status, 'PAID');
+assert.equal(settledInvoice.schedules[0].status, 'PAID');
+const journals = await json(await api('/returns-finance/journals', admin), 200);
+for (const sourceId of [refund.id, creditNote.id]) {
+  const journal = journals.find((candidate) => candidate.sourceId === sourceId);
+  assert.ok(journal);
+  assert.equal(
+    journal.lines.reduce((sum, line) => sum + line.debitMinor, 0),
+    journal.lines.reduce((sum, line) => sum + line.creditMinor, 0),
+  );
+}
+
 const overview = await json(await api('/analytics/overview?days=30', admin), 200);
 assert.ok(overview.transportation);
 assert.ok(overview.domainActivity.some(({ key }) => key === 'freight'));

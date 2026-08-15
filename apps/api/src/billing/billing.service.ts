@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -24,8 +25,24 @@ type ProviderEvent = {
   status?: string;
   payment_status?: string;
   metadata?: Record<string, string>;
+  updatedAt?: string;
+  refunds?: Array<{ id?: string; status?: string }>;
   data?: { object?: { id?: string; payment_status?: string; metadata?: Record<string, string> } };
 };
+
+function safeMoneyNumber(amount: bigint): number {
+  const value = Number(amount);
+  if (!Number.isSafeInteger(value)) {
+    throw new ConflictException('Amount exceeds the supported payment range');
+  }
+  return value;
+}
+
+function formatMinor(amount: bigint): string {
+  const sign = amount < 0n ? '-' : '';
+  const absolute = amount < 0n ? -amount : amount;
+  return `${sign}${absolute / 100n}.${String(absolute % 100n).padStart(2, '0')}`;
+}
 
 @Injectable()
 export class BillingService {
@@ -98,8 +115,9 @@ export class BillingService {
       ? invoice.schedules.find((candidate) => candidate.id === input.scheduleId)
       : invoice.schedules.find((candidate) => candidate.status !== 'PAID');
     if (!schedule) throw new ConflictException('No payable schedule remains');
-    const remaining = Number(schedule.amountMinor - schedule.paidMinor);
-    if (remaining <= 0) throw new ConflictException('Payment schedule is already paid');
+    const remainingMinor = schedule.amountMinor - schedule.paidMinor - schedule.creditedMinor;
+    if (remainingMinor <= 0n) throw new ConflictException('Payment schedule is already paid');
+    const remaining = safeMoneyNumber(remainingMinor);
     const existing = await this.db.paymentSession.findFirst({
       where: { tenantId: context.tenantId, idempotencyKey },
     });
@@ -140,14 +158,17 @@ export class BillingService {
     if (!this.providers.verifyStripe(body, signature)) {
       throw new UnauthorizedException('Invalid Stripe webhook signature');
     }
-    const event = JSON.parse(body) as ProviderEvent;
+    const event = this.parseProviderEvent(body);
     const object = event.data?.object;
     return this.receiveProviderEvent({
       provider: 'STRIPE',
       eventId: event.id ?? '',
       eventType: event.type ?? '',
       providerReference: object?.id ?? '',
-      success: event.type === 'checkout.session.completed' && object?.payment_status === 'paid',
+      success:
+        ['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(
+          event.type ?? '',
+        ) && object?.payment_status === 'paid',
       failed: ['checkout.session.expired', 'checkout.session.async_payment_failed'].includes(
         event.type ?? '',
       ),
@@ -160,10 +181,10 @@ export class BillingService {
     if (!this.providers.verifyCoinbase(body, signature, headers)) {
       throw new UnauthorizedException('Invalid Coinbase webhook signature');
     }
-    const event = JSON.parse(body) as ProviderEvent;
+    const event = this.parseProviderEvent(body);
     return this.receiveProviderEvent({
       provider: 'COINBASE',
-      eventId: event.id ?? '',
+      eventId: `payload-${createHash('sha256').update(body).digest('hex')}`,
       eventType: event.eventType ?? '',
       providerReference: event.id ?? '',
       success: event.eventType === 'checkout.payment.success' || event.status === 'COMPLETED',
@@ -171,6 +192,7 @@ export class BillingService {
         ['checkout.payment.failed', 'checkout.payment.expired'].includes(event.eventType ?? '') ||
         ['FAILED', 'EXPIRED'].includes(event.status ?? ''),
       payload: event,
+      ...(event.refunds ? { refunds: event.refunds } : {}),
     });
   }
 
@@ -209,11 +231,11 @@ export class BillingService {
             if (!session) throw new NotFoundException('Resource not found');
             const alreadyReserved = session.refunds
               .filter((refund) => refund.status !== 'FAILED')
-              .reduce((sum, refund) => sum + Number(refund.amountMinor), 0);
-            if (input.amountMinor + alreadyReserved > Number(session.amountMinor)) {
+              .reduce((sum, refund) => sum + refund.amountMinor, 0n);
+            if (BigInt(input.amountMinor) + alreadyReserved > session.amountMinor) {
               throw new ConflictException('Refund exceeds the captured payment');
             }
-            return tx.paymentRefund.create({
+            const refund = await tx.paymentRefund.create({
               data: {
                 id: randomUUID(),
                 tenantId: context.tenantId,
@@ -226,6 +248,22 @@ export class BillingService {
                 requestedBy: principal.userId,
               },
             });
+            await tx.auditEvent.create({
+              data: {
+                id: randomUUID(),
+                tenantId: context.tenantId,
+                actorId: principal.userId,
+                actorType: 'USER',
+                action: 'billing.refund.requested',
+                entityType: 'PAYMENT_REFUND',
+                entityId: refund.id,
+                reason: input.reason,
+                requestId: context.correlationId,
+                correlationId: context.correlationId,
+                metadata: { sessionId, amountMinor: input.amountMinor },
+              },
+            });
+            return refund;
           },
           { isolationLevel: 'Serializable' },
         )
@@ -248,7 +286,7 @@ export class BillingService {
       const provider = await this.providers.refund({
         provider: session.provider,
         providerReference: session.providerReference,
-        amountMinor: Number(intent.amountMinor),
+        amountMinor: safeMoneyNumber(intent.amountMinor),
         reason: intent.reason,
         idempotencyKey,
       });
@@ -280,22 +318,141 @@ export class BillingService {
     invoiceId: string,
     input: IssueCreditNoteDto,
   ) {
-    const invoice = await this.invoice(context, principal, invoiceId, true);
-    if (input.amountMinor > Number(invoice.totalMinor)) {
-      throw new ConflictException('Credit note exceeds invoice total');
-    }
-    const id = randomUUID();
-    return this.db.creditNote.create({
-      data: {
-        id,
-        tenantId: context.tenantId,
-        invoiceId,
-        number: `CRN-${new Date().getUTCFullYear()}-${id.slice(0, 8).toUpperCase()}`,
-        amountMinor: input.amountMinor,
-        reason: input.reason,
-        issuedBy: principal.userId,
+    await this.invoice(context, principal, invoiceId, true);
+    return this.db.$transaction(
+      async (tx) => {
+        const invoice = await tx.billingInvoice.findFirst({
+          where: { id: invoiceId, tenantId: context.tenantId, status: { not: 'VOID' } },
+          include: { schedules: { orderBy: { sequence: 'asc' } } },
+        });
+        if (!invoice) throw new NotFoundException('Resource not found');
+        const amount = BigInt(input.amountMinor);
+        if (invoice.creditedMinor + amount > invoice.totalMinor) {
+          throw new ConflictException('Credit notes exceed invoice total');
+        }
+        const [adjustment, receivable] = await Promise.all([
+          tx.financialAccount.findFirst({
+            where: {
+              tenantId: context.tenantId,
+              code: '5000',
+              currency: invoice.currency,
+              active: true,
+            },
+          }),
+          tx.financialAccount.findFirst({
+            where: {
+              tenantId: context.tenantId,
+              code: '1100',
+              currency: invoice.currency,
+              active: true,
+            },
+          }),
+        ]);
+        if (!adjustment || !receivable) {
+          throw new ServiceUnavailableException(
+            'Finance chart is not configured for this currency',
+          );
+        }
+        const id = randomUUID();
+        const note = await tx.creditNote.create({
+          data: {
+            id,
+            tenantId: context.tenantId,
+            invoiceId,
+            number: `CRN-${new Date().getUTCFullYear()}-${id.slice(0, 8).toUpperCase()}`,
+            amountMinor: amount,
+            reason: input.reason,
+            issuedBy: principal.userId,
+          },
+        });
+        let unallocated = amount;
+        for (const schedule of invoice.schedules) {
+          if (unallocated === 0n) break;
+          const outstanding = schedule.amountMinor - schedule.paidMinor - schedule.creditedMinor;
+          if (outstanding <= 0n) continue;
+          const applied = outstanding < unallocated ? outstanding : unallocated;
+          const settled =
+            schedule.paidMinor + schedule.creditedMinor + applied >= schedule.amountMinor;
+          await tx.invoicePaymentSchedule.update({
+            where: { id: schedule.id },
+            data: {
+              creditedMinor: { increment: applied },
+              status: settled ? 'PAID' : 'PARTIALLY_PAID',
+            },
+          });
+          unallocated -= applied;
+        }
+        if (unallocated !== 0n) {
+          throw new ConflictException('Credit note exceeds the unpaid scheduled balance');
+        }
+        const settled = invoice.paidMinor + invoice.creditedMinor + amount >= invoice.totalMinor;
+        await tx.billingInvoice.update({
+          where: { id: invoice.id },
+          data: {
+            creditedMinor: { increment: amount },
+            status: settled ? 'PAID' : invoice.paidMinor > 0n ? 'PARTIALLY_PAID' : 'ISSUED',
+            version: { increment: 1 },
+          },
+        });
+        const journalId = randomUUID();
+        await tx.journalEntry.create({
+          data: {
+            id: journalId,
+            tenantId: context.tenantId,
+            number: `CRN-${journalId.slice(0, 8).toUpperCase()}`,
+            sourceType: 'CREDIT_NOTE',
+            sourceId: note.id,
+            description: `Credit note ${note.number} for ${invoice.number}`,
+            currency: invoice.currency,
+            idempotencyKey: `credit-note:${note.id}`,
+            postedBy: principal.userId,
+            lines: {
+              create: [
+                {
+                  id: randomUUID(),
+                  tenantId: context.tenantId,
+                  accountId: adjustment.id,
+                  debitMinor: amount,
+                },
+                {
+                  id: randomUUID(),
+                  tenantId: context.tenantId,
+                  accountId: receivable.id,
+                  creditMinor: amount,
+                },
+              ],
+            },
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            id: randomUUID(),
+            tenantId: context.tenantId,
+            actorId: principal.userId,
+            actorType: 'USER',
+            action: 'billing.credit-note.issued',
+            entityType: 'CREDIT_NOTE',
+            entityId: note.id,
+            reason: input.reason,
+            requestId: context.correlationId,
+            correlationId: context.correlationId,
+            metadata: { invoiceId, amountMinor: input.amountMinor },
+          },
+        });
+        await tx.outboxEvent.create({
+          data: {
+            id: randomUUID(),
+            tenantId: context.tenantId,
+            type: 'billing.credit-note.issued.v1',
+            subject: `invoice/${invoiceId}`,
+            payload: { invoiceId, creditNoteId: note.id, amountMinor: input.amountMinor },
+            correlationId: context.correlationId,
+          },
+        });
+        return note;
       },
-    });
+      { isolationLevel: 'Serializable' },
+    );
   }
 
   async document(context: TenantContext, principal: AuthPrincipal, invoiceId: string, all = false) {
@@ -311,6 +468,7 @@ export class BillingService {
     success: boolean;
     failed: boolean;
     payload: ProviderEvent;
+    refunds?: Array<{ id?: string; status?: string }>;
   }) {
     if (!input.eventId || !input.providerReference) {
       throw new ConflictException('Payment event identity is missing');
@@ -351,8 +509,8 @@ export class BillingService {
         await this.processSuccessfulPayment(session.id, event.id, input.payload);
       } else if (input.failed) {
         await this.db.$transaction([
-          this.db.paymentSession.update({
-            where: { id: session.id },
+          this.db.paymentSession.updateMany({
+            where: { id: session.id, status: 'PENDING' },
             data: { status: 'FAILED' },
           }),
           this.db.paymentEvent.update({
@@ -361,6 +519,9 @@ export class BillingService {
           }),
         ]);
       } else {
+        if (input.provider === 'COINBASE' && input.refunds?.length) {
+          await this.reconcileCoinbaseRefunds(session.tenantId, input.refunds);
+        }
         await this.db.paymentEvent.update({
           where: { id: event.id },
           data: { status: 'PROCESSED', processedAt: new Date() },
@@ -377,6 +538,44 @@ export class BillingService {
       throw error;
     }
     return { received: true };
+  }
+
+  private parseProviderEvent(body: string): ProviderEvent {
+    try {
+      const value = JSON.parse(body) as unknown;
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('event must be an object');
+      }
+      return value as ProviderEvent;
+    } catch {
+      throw new BadRequestException('Payment webhook payload must be valid JSON');
+    }
+  }
+
+  private async reconcileCoinbaseRefunds(
+    tenantId: string,
+    providerRefunds: Array<{ id?: string; status?: string }>,
+  ): Promise<void> {
+    for (const providerRefund of providerRefunds) {
+      if (!providerRefund.id) continue;
+      const refund = await this.db.paymentRefund.findFirst({
+        where: { tenantId, providerReference: providerRefund.id },
+        select: { id: true },
+      });
+      if (!refund) continue;
+      if (providerRefund.status === 'COMPLETED') {
+        await this.db.paymentRefund.updateMany({
+          where: { id: refund.id, tenantId, status: { not: 'COMPLETED' } },
+          data: { status: 'COMPLETED', completedAt: new Date(), lastError: null },
+        });
+        await this.applyRefund(refund.id);
+      } else if (providerRefund.status === 'FAILED') {
+        await this.db.paymentRefund.updateMany({
+          where: { id: refund.id, tenantId, status: { not: 'COMPLETED' } },
+          data: { status: 'FAILED', lastError: 'Provider reported a failed refund' },
+        });
+      }
+    }
   }
 
   private async processSuccessfulPayment(
@@ -402,7 +601,7 @@ export class BillingService {
       const invoice = session.schedule.invoice;
       const amount = session.amountMinor;
       const paidMinor = invoice.paidMinor + amount;
-      const fullyPaid = paidMinor >= invoice.totalMinor;
+      const fullyPaid = paidMinor + invoice.creditedMinor >= invoice.totalMinor;
       await tx.paymentAllocation.create({
         data: {
           id: randomUUID(),
@@ -423,7 +622,8 @@ export class BillingService {
         data: {
           paidMinor: { increment: amount },
           status:
-            session.schedule.paidMinor + amount >= session.schedule.amountMinor
+            session.schedule.paidMinor + session.schedule.creditedMinor + amount >=
+            session.schedule.amountMinor
               ? 'PAID'
               : 'PARTIALLY_PAID',
         },
@@ -481,38 +681,39 @@ export class BillingService {
           },
         }),
       ]);
-      if (cash && receivable) {
-        const journalId = randomUUID();
-        await tx.journalEntry.create({
-          data: {
-            id: journalId,
-            tenantId: session.tenantId,
-            number: `PAY-${journalId.slice(0, 8).toUpperCase()}`,
-            sourceType: 'PAYMENT',
-            sourceId: session.id,
-            description: `Payment for ${invoice.number}`,
-            currency: invoice.currency,
-            idempotencyKey: `payment:${session.id}`,
-            postedBy: invoice.customerId ?? '00000000-0000-4000-8000-000000000000',
-            lines: {
-              create: [
-                {
-                  id: randomUUID(),
-                  tenantId: session.tenantId,
-                  accountId: cash.id,
-                  debitMinor: amount,
-                },
-                {
-                  id: randomUUID(),
-                  tenantId: session.tenantId,
-                  accountId: receivable.id,
-                  creditMinor: amount,
-                },
-              ],
-            },
-          },
-        });
+      if (!cash || !receivable) {
+        throw new ServiceUnavailableException('Finance chart is not configured for this currency');
       }
+      const journalId = randomUUID();
+      await tx.journalEntry.create({
+        data: {
+          id: journalId,
+          tenantId: session.tenantId,
+          number: `PAY-${journalId.slice(0, 8).toUpperCase()}`,
+          sourceType: 'PAYMENT',
+          sourceId: session.id,
+          description: `Payment for ${invoice.number}`,
+          currency: invoice.currency,
+          idempotencyKey: `payment:${session.id}`,
+          postedBy: invoice.customerId ?? '00000000-0000-4000-8000-000000000000',
+          lines: {
+            create: [
+              {
+                id: randomUUID(),
+                tenantId: session.tenantId,
+                accountId: cash.id,
+                debitMinor: amount,
+              },
+              {
+                id: randomUUID(),
+                tenantId: session.tenantId,
+                accountId: receivable.id,
+                creditMinor: amount,
+              },
+            ],
+          },
+        },
+      });
       await tx.outboxEvent.create({
         data: {
           id: randomUUID(),
@@ -522,7 +723,7 @@ export class BillingService {
           payload: {
             invoiceId: invoice.id,
             paymentSessionId: session.id,
-            amountMinor: Number(amount),
+            amountMinor: safeMoneyNumber(amount),
             evidence,
           } as Prisma.InputJsonValue,
           correlationId: randomUUID(),
@@ -541,22 +742,117 @@ export class BillingService {
     await this.db.$transaction(async (tx) => {
       const refund = await tx.paymentRefund.findUnique({
         where: { id: refundId },
-        include: { invoice: true },
+        include: { invoice: true, session: { include: { schedule: true } } },
       });
       if (!refund || refund.status !== 'COMPLETED') return;
+      if (
+        refund.invoice.paidMinor < refund.amountMinor ||
+        refund.session.schedule.paidMinor < refund.amountMinor
+      ) {
+        throw new ConflictException('Refund would make an allocated payment negative');
+      }
       const claimed = await tx.paymentRefund.updateMany({
         where: { id: refund.id, status: 'COMPLETED', appliedAt: null },
         data: { appliedAt: new Date() },
       });
       if (claimed.count !== 1) return;
       const paidMinor = refund.invoice.paidMinor - refund.amountMinor;
+      const schedulePaidMinor = refund.session.schedule.paidMinor - refund.amountMinor;
+      const invoiceSettled = paidMinor + refund.invoice.creditedMinor >= refund.invoice.totalMinor;
+      const scheduleSettled =
+        schedulePaidMinor + refund.session.schedule.creditedMinor >=
+        refund.session.schedule.amountMinor;
+      const invoiceStatus = invoiceSettled
+        ? 'PAID'
+        : paidMinor > 0n || refund.invoice.creditedMinor > 0n
+          ? 'PARTIALLY_PAID'
+          : refund.invoice.dueAt < new Date()
+            ? 'OVERDUE'
+            : 'ISSUED';
+      const [receivable, cash] = await Promise.all([
+        tx.financialAccount.findFirst({
+          where: {
+            tenantId: refund.tenantId,
+            code: '1100',
+            currency: refund.invoice.currency,
+            active: true,
+          },
+        }),
+        tx.financialAccount.findFirst({
+          where: {
+            tenantId: refund.tenantId,
+            code: '1000',
+            currency: refund.invoice.currency,
+            active: true,
+          },
+        }),
+      ]);
+      if (!receivable || !cash) {
+        throw new ServiceUnavailableException('Finance chart is not configured for this currency');
+      }
+      await tx.invoicePaymentSchedule.update({
+        where: { id: refund.session.scheduleId },
+        data: {
+          paidMinor: schedulePaidMinor,
+          status: scheduleSettled
+            ? 'PAID'
+            : schedulePaidMinor > 0n || refund.session.schedule.creditedMinor > 0n
+              ? 'PARTIALLY_PAID'
+              : 'DUE',
+        },
+      });
       await tx.billingInvoice.update({
         where: { id: refund.invoiceId },
         data: {
           paidMinor,
-          status: paidMinor <= 0 ? 'ISSUED' : 'PARTIALLY_PAID',
-          paidAt: null,
+          status: invoiceStatus,
+          paidAt: invoiceSettled ? refund.invoice.paidAt : null,
           version: { increment: 1 },
+        },
+      });
+      const journalId = randomUUID();
+      await tx.journalEntry.create({
+        data: {
+          id: journalId,
+          tenantId: refund.tenantId,
+          number: `REF-${journalId.slice(0, 8).toUpperCase()}`,
+          sourceType: 'PAYMENT_REFUND',
+          sourceId: refund.id,
+          description: `Refund for ${refund.invoice.number}`,
+          currency: refund.invoice.currency,
+          idempotencyKey: `payment-refund:${refund.id}`,
+          postedBy: refund.requestedBy,
+          lines: {
+            create: [
+              {
+                id: randomUUID(),
+                tenantId: refund.tenantId,
+                accountId: receivable.id,
+                debitMinor: refund.amountMinor,
+              },
+              {
+                id: randomUUID(),
+                tenantId: refund.tenantId,
+                accountId: cash.id,
+                creditMinor: refund.amountMinor,
+              },
+            ],
+          },
+        },
+      });
+      await tx.outboxEvent.create({
+        data: {
+          id: randomUUID(),
+          tenantId: refund.tenantId,
+          type: 'billing.payment.refunded.v1',
+          subject: `invoice/${refund.invoiceId}`,
+          payload: {
+            invoiceId: refund.invoiceId,
+            paymentSessionId: refund.sessionId,
+            refundId: refund.id,
+            amountMinor: safeMoneyNumber(refund.amountMinor),
+          },
+          correlationId: randomUUID(),
         },
       });
     });
@@ -575,6 +871,7 @@ export class BillingService {
     currency: string;
     totalMinor: bigint;
     paidMinor: bigint;
+    creditedMinor: bigint;
     dueAt: Date;
     lines: Array<{ description: string; totalMinor: bigint }>;
   }) {
@@ -584,11 +881,11 @@ export class BillingService {
       `Invoice ${invoice.number}`,
       `Due ${invoice.dueAt.toISOString().slice(0, 10)}`,
       ...invoice.lines.map(
-        (line) =>
-          `${line.description}: ${invoice.currency} ${(Number(line.totalMinor) / 100).toFixed(2)}`,
+        (line) => `${line.description}: ${invoice.currency} ${formatMinor(line.totalMinor)}`,
       ),
-      `Total: ${invoice.currency} ${(Number(invoice.totalMinor) / 100).toFixed(2)}`,
-      `Paid: ${invoice.currency} ${(Number(invoice.paidMinor) / 100).toFixed(2)}`,
+      `Total: ${invoice.currency} ${formatMinor(invoice.totalMinor)}`,
+      `Paid: ${invoice.currency} ${formatMinor(invoice.paidMinor)}`,
+      `Credited: ${invoice.currency} ${formatMinor(invoice.creditedMinor)}`,
     ];
     const stream = rows
       .map((row, index) => `BT /F1 11 Tf 50 ${760 - index * 22} Td (${escape(row)}) Tj ET`)

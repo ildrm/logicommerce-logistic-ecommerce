@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
+import {
+  safeIntegerNumber,
+  type DatabaseClient,
+  type Prisma,
+  type TenantContext,
+} from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
 import { CARRIER_ADAPTER, type CarrierPort } from './carrier.adapter.js';
@@ -384,7 +389,10 @@ export class FulfillmentRepository {
         where: { id },
         data: { status: 'LABELED', version: { increment: 1 } },
       });
-      return { ...shipment, rateMinor: Number(shipment.rateMinor) };
+      return {
+        ...shipment,
+        rateMinor: safeIntegerNumber(shipment.rateMinor, 'Shipment rate'),
+      };
     });
   }
 

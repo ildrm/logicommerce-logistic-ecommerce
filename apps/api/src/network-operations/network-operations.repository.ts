@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
+import {
+  safeIntegerNumber,
+  type DatabaseClient,
+  type Prisma,
+  type TenantContext,
+} from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
 import { nextInvoiceNumber } from '../billing/invoice-issuance.js';
@@ -133,7 +138,7 @@ export class NetworkOperationsRepository {
         sourceId: input.sourceId,
         quantity: input.quantity,
         unitPriceMinor: input.unitPriceMinor,
-        totalMinor: input.quantity * input.unitPriceMinor,
+        totalMinor: BigInt(input.quantity) * BigInt(input.unitPriceMinor),
         currency: input.currency.toUpperCase(),
         occurredAt: new Date(input.occurredAt),
       },
@@ -172,7 +177,7 @@ export class NetworkOperationsRepository {
           periodStart: start,
           periodEnd: end,
           currency: events[0]!.currency,
-          totalMinor: events.reduce((sum, event) => sum + Number(event.totalMinor), 0),
+          totalMinor: events.reduce((sum, event) => sum + event.totalMinor, 0n),
           dueAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000),
         },
       });
@@ -335,7 +340,7 @@ export class NetworkOperationsRepository {
         exceptionId: recommendation.exceptionId,
         fromFacilityId: recommendation.exception.fulfillmentOrderId,
         toFacilityId: recommendation.facilityId,
-        costMinor: Number(recommendation.costMinor),
+        costMinor: safeIntegerNumber(recommendation.costMinor, 'Route recommendation cost'),
         slaHours: recommendation.slaHours,
       });
       return approved;

@@ -50,6 +50,57 @@ type SelectedUser = {
 export class AuthRepository implements AuthStore {
   constructor(@Inject(DATABASE) private readonly database: DatabaseClient) {}
 
+  async registerCustomer(
+    context: TenantContext,
+    input: Parameters<AuthStore['registerCustomer']>[1],
+  ): ReturnType<AuthStore['registerCustomer']> {
+    try {
+      return await this.database.$transaction(async (transaction) => {
+        const tenant = await transaction.tenant.findFirst({
+          where: { id: context.tenantId, status: 'ACTIVE' },
+          select: { selfRegistrationEnabled: true },
+        });
+        if (!tenant?.selfRegistrationEnabled) return { status: 'disabled' } as const;
+        const role = await transaction.role.findFirst({
+          where: { tenantId: context.tenantId, key: 'customer' },
+          select: { id: true },
+        });
+        if (!role) return { status: 'unavailable' } as const;
+        const user = await transaction.user.create({
+          data: {
+            id: randomUUID(),
+            tenantId: context.tenantId,
+            email: input.email,
+            displayName: input.displayName,
+            identities: {
+              create: {
+                id: randomUUID(),
+                tenantId: context.tenantId,
+                kind: 'PASSWORD',
+                provider: 'local',
+                providerUserId: input.email,
+                passwordHash: input.passwordHash,
+              },
+            },
+            userRoles: { create: { tenantId: context.tenantId, roleId: role.id } },
+          },
+          select: userSelection,
+        });
+        return { status: 'created', user: this.mapUser(user) } as const;
+      });
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        return { status: 'exists' };
+      }
+      throw error;
+    }
+  }
+
   async findPasswordUser(context: TenantContext, email: string): Promise<PasswordUser | null> {
     const identity = await this.database.userIdentity.findFirst({
       where: tenantScopedWhere(context, {

@@ -86,7 +86,7 @@ export default function PlatformPage() {
           <a href="/dashboard">
             Open dashboard <span aria-hidden="true">→</span>
           </a>
-          <a href="http://localhost:8080/api/docs">
+          <a href="/api/docs">
             Open API reference <span aria-hidden="true">→</span>
           </a>
         </aside>

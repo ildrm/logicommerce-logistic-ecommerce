@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { writeFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Inject, Injectable, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import type { DatabaseClient } from '@logicommerce/database';
 import { parseEnvironment } from '@logicommerce/config';
@@ -8,6 +10,20 @@ import { Queue } from 'bullmq';
 
 const logger = createLogger('worker');
 export const DATABASE = Symbol('DATABASE');
+export const HEALTH_FILE = join(tmpdir(), 'logicommerce-worker-healthy');
+
+export function redisConnection(redisUrl: string) {
+  const redis = new URL(redisUrl);
+  return {
+    host: redis.hostname,
+    port: Number(redis.port || 6379),
+    ...(redis.username ? { username: redis.username } : {}),
+    ...(redis.password ? { password: redis.password } : {}),
+    db: redis.pathname.length > 1 ? Number(redis.pathname.slice(1)) : 0,
+    ...(redis.protocol === 'rediss:' ? { tls: {} } : {}),
+    maxRetriesPerRequest: null,
+  };
+}
 
 @Injectable()
 export class OutboxPublisher implements OnModuleInit, OnApplicationShutdown {
@@ -16,16 +32,8 @@ export class OutboxPublisher implements OnModuleInit, OnApplicationShutdown {
 
   constructor(@Inject(DATABASE) private readonly database: DatabaseClient) {
     const environment = parseEnvironment(process.env);
-    const redis = new URL(environment.REDIS_URL);
     this.queue = new Queue(environment.OUTBOX_QUEUE_NAME, {
-      connection: {
-        host: redis.hostname,
-        port: Number(redis.port || 6379),
-        ...(redis.username ? { username: redis.username } : {}),
-        ...(redis.password ? { password: redis.password } : {}),
-        db: redis.pathname.length > 1 ? Number(redis.pathname.slice(1)) : 0,
-        maxRetriesPerRequest: null,
-      },
+      connection: redisConnection(environment.REDIS_URL),
     });
   }
 
@@ -35,7 +43,9 @@ export class OutboxPublisher implements OnModuleInit, OnApplicationShutdown {
         logger.error({ err: error }, 'Outbox poll failed; retrying');
       });
     }, 2_000);
-    void this.publishBatch();
+    void this.publishBatch().catch((error: unknown) => {
+      logger.error({ err: error }, 'Initial outbox poll failed; retrying');
+    });
   }
 
   async onApplicationShutdown() {
@@ -229,7 +239,7 @@ export class ReservationExpirySweeper implements OnModuleInit, OnApplicationShut
             payload: {
               reservationId: reservation.id,
               inventoryItemId: reservation.inventoryItemId,
-              quantity: Number(reservation.quantity),
+              quantity: reservation.quantity.toString(),
             },
             correlationId,
           },
@@ -252,7 +262,9 @@ export class TransportOperationsSweeper implements OnModuleInit, OnApplicationSh
         logger.error({ err: error }, 'Transport operations sweep failed; retrying');
       });
     }, 60_000);
-    void this.sweep();
+    void this.sweep().catch((error: unknown) => {
+      logger.error({ err: error }, 'Initial transport operations sweep failed; retrying');
+    });
   }
 
   onApplicationShutdown() {
@@ -393,10 +405,10 @@ export class TransportOperationsSweeper implements OnModuleInit, OnApplicationSh
 @Injectable()
 export class WorkerHealth implements OnModuleInit, OnApplicationShutdown {
   async onModuleInit() {
-    await writeFile('/tmp/logicommerce-worker-healthy', new Date().toISOString(), { mode: 0o600 });
+    await writeFile(HEALTH_FILE, new Date().toISOString(), { mode: 0o600 });
   }
 
   async onApplicationShutdown() {
-    await unlink('/tmp/logicommerce-worker-healthy').catch(() => undefined);
+    await unlink(HEALTH_FILE).catch(() => undefined);
   }
 }

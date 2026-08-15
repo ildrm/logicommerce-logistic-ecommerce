@@ -6,7 +6,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
+import {
+  safeIntegerNumber,
+  type DatabaseClient,
+  type Prisma,
+  type TenantContext,
+} from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
 import type {
@@ -86,7 +91,12 @@ export class C2CRepository {
         where: { tenantId: context.tenantId, status: 'ACTIVE', expiresAt: { gt: new Date() } },
         orderBy: { createdAt: 'desc' },
       })
-      .then((items) => items.map((item) => ({ ...item, priceMinor: Number(item.priceMinor) })));
+      .then((items) =>
+        items.map((item) => ({
+          ...item,
+          priceMinor: safeIntegerNumber(item.priceMinor, 'Listing price'),
+        })),
+      );
   }
 
   mine(context: TenantContext, principal: AuthPrincipal): Promise<unknown> {

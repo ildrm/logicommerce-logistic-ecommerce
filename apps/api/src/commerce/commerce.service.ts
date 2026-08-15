@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
-import type { TenantContext } from '@logicommerce/database';
+import { safeIntegerNumber, type TenantContext } from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import type {
   AddCartLineDto,
@@ -194,9 +194,12 @@ export class CommerceService {
         throw new ConflictException('An offer changed; refresh the cart');
       }
     }
-    const subtotalMinor = cart.lines.reduce(
-      (sum, line) => sum + line.unitPriceMinor * line.quantity,
-      0,
+    const subtotalMinor = safeIntegerNumber(
+      cart.lines.reduce(
+        (sum, line) => sum + BigInt(line.unitPriceMinor) * BigInt(line.quantity),
+        0n,
+      ),
+      'Cart subtotal',
     );
     const discount = await this.commerce.promotionDiscount(
       context,
@@ -217,7 +220,10 @@ export class CommerceService {
       discountMinor: discount.amount,
       taxMinor,
       shippingMinor,
-      totalMinor: taxableMinor + taxMinor + shippingMinor,
+      totalMinor: safeIntegerNumber(
+        BigInt(taxableMinor) + BigInt(taxMinor) + BigInt(shippingMinor),
+        'Checkout total',
+      ),
       currency: cart.currency,
       promotionCode: discount.code,
       splitCount,

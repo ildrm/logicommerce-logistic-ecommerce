@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
+import {
+  safeIntegerNumber,
+  type DatabaseClient,
+  type Prisma,
+  type TenantContext,
+} from '@logicommerce/database';
 import { DATABASE } from '../database/database.module.js';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import type {
@@ -832,11 +837,11 @@ export class CatalogRepository {
   private offer<T extends { priceMinor: bigint; compareAtMinor?: bigint | null }>(offer: T) {
     return {
       ...offer,
-      priceMinor: Number(offer.priceMinor),
+      priceMinor: safeIntegerNumber(offer.priceMinor, 'Offer price'),
       compareAtMinor:
         offer.compareAtMinor === null || offer.compareAtMinor === undefined
           ? null
-          : Number(offer.compareAtMinor),
+          : safeIntegerNumber(offer.compareAtMinor, 'Offer comparison price'),
     };
   }
 

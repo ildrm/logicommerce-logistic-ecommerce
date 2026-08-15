@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
+import {
+  safeIntegerNumber,
+  type DatabaseClient,
+  type Prisma,
+  type TenantContext,
+} from '@logicommerce/database';
 import type { AuthPrincipal } from '../auth/auth.types.js';
 import { DATABASE } from '../database/database.module.js';
 import { nextInvoiceNumber } from '../billing/invoice-issuance.js';
@@ -217,7 +222,10 @@ export class CommerceRepository {
           facilityId: item.facilityId,
           version: item.version,
           balances: Object.fromEntries(
-            item.balances.map((balance) => [balance.state, Number(balance.quantity)]),
+            item.balances.map((balance) => [
+              balance.state,
+              safeIntegerNumber(balance.quantity, 'Inventory balance'),
+            ]),
           ),
         })),
       );
@@ -302,7 +310,7 @@ export class CommerceRepository {
       .then((promotions) =>
         promotions.map((promotion) => ({
           ...promotion,
-          minimumMinor: Number(promotion.minimumMinor),
+          minimumMinor: safeIntegerNumber(promotion.minimumMinor, 'Promotion minimum'),
         })),
       );
   }
@@ -353,7 +361,10 @@ export class CommerceRepository {
         'PROMOTION',
         promotion.id,
       );
-      return { ...promotion, minimumMinor: Number(promotion.minimumMinor) };
+      return {
+        ...promotion,
+        minimumMinor: safeIntegerNumber(promotion.minimumMinor, 'Promotion minimum'),
+      };
     } catch (error) {
       if (
         typeof error === 'object' &&
@@ -517,7 +528,10 @@ export class CommerceRepository {
     if (!promotion) throw new ConflictException('Promotion is invalid or unavailable');
     const amount =
       promotion.kind === 'PERCENTAGE'
-        ? Math.round((subtotalMinor * promotion.value) / 100)
+        ? safeIntegerNumber(
+            (BigInt(subtotalMinor) * BigInt(promotion.value) + 50n) / 100n,
+            'Promotion discount',
+          )
         : promotion.value;
     return { code: promotion.code, amount: Math.min(subtotalMinor, amount) };
   }
@@ -901,11 +915,11 @@ export class CommerceRepository {
       .then((orders) =>
         orders.map((order) => ({
           ...order,
-          subtotalMinor: Number(order.subtotalMinor),
-          discountMinor: Number(order.discountMinor),
-          taxMinor: Number(order.taxMinor),
-          shippingMinor: Number(order.shippingMinor),
-          totalMinor: Number(order.totalMinor),
+          subtotalMinor: safeIntegerNumber(order.subtotalMinor, 'Order subtotal'),
+          discountMinor: safeIntegerNumber(order.discountMinor, 'Order discount'),
+          taxMinor: safeIntegerNumber(order.taxMinor, 'Order tax'),
+          shippingMinor: safeIntegerNumber(order.shippingMinor, 'Order shipping'),
+          totalMinor: safeIntegerNumber(order.totalMinor, 'Order total'),
         })),
       );
   }
@@ -920,11 +934,11 @@ export class CommerceRepository {
       .then((orders) =>
         orders.map((order) => ({
           ...order,
-          subtotalMinor: Number(order.subtotalMinor),
-          discountMinor: Number(order.discountMinor),
-          taxMinor: Number(order.taxMinor),
-          shippingMinor: Number(order.shippingMinor),
-          totalMinor: Number(order.totalMinor),
+          subtotalMinor: safeIntegerNumber(order.subtotalMinor, 'Order subtotal'),
+          discountMinor: safeIntegerNumber(order.discountMinor, 'Order discount'),
+          taxMinor: safeIntegerNumber(order.taxMinor, 'Order tax'),
+          shippingMinor: safeIntegerNumber(order.shippingMinor, 'Order shipping'),
+          totalMinor: safeIntegerNumber(order.totalMinor, 'Order total'),
         })),
       );
   }
@@ -1168,11 +1182,11 @@ export class CommerceRepository {
       lines: cart.lines.map((line) => ({
         id: line.id,
         quantity: line.quantity,
-        unitPriceMinor: Number(line.unitPriceMinor),
+        unitPriceMinor: safeIntegerNumber(line.unitPriceMinor, 'Cart unit price'),
         offerVersion: line.offerVersion,
         offer: {
           ...line.offer,
-          priceMinor: Number(line.offer.priceMinor),
+          priceMinor: safeIntegerNumber(line.offer.priceMinor, 'Offer price'),
         },
       })),
     };
@@ -1197,7 +1211,7 @@ export class CommerceRepository {
       variantId: feed.inventoryItem.productRef,
       sku: feed.inventoryItem.sku,
       facilityId: feed.inventoryItem.facilityId,
-      quantity: Number(feed.quantity),
+      quantity: safeIntegerNumber(feed.quantity, 'Inventory feed quantity'),
       idempotentReplay,
     };
   }
@@ -1225,19 +1239,19 @@ export class CommerceRepository {
     if (!order) throw new NotFoundException('Resource not found');
     return {
       ...order,
-      subtotalMinor: Number(order.subtotalMinor),
-      discountMinor: Number(order.discountMinor),
-      taxMinor: Number(order.taxMinor),
-      shippingMinor: Number(order.shippingMinor),
-      totalMinor: Number(order.totalMinor),
+      subtotalMinor: safeIntegerNumber(order.subtotalMinor, 'Order subtotal'),
+      discountMinor: safeIntegerNumber(order.discountMinor, 'Order discount'),
+      taxMinor: safeIntegerNumber(order.taxMinor, 'Order tax'),
+      shippingMinor: safeIntegerNumber(order.shippingMinor, 'Order shipping'),
+      totalMinor: safeIntegerNumber(order.totalMinor, 'Order total'),
       lines: order.lines.map((line) => ({
         ...line,
-        unitPriceMinor: Number(line.unitPriceMinor),
-        lineTotalMinor: Number(line.lineTotalMinor),
+        unitPriceMinor: safeIntegerNumber(line.unitPriceMinor, 'Order-line unit price'),
+        lineTotalMinor: safeIntegerNumber(line.lineTotalMinor, 'Order-line total'),
       })),
       splits: order.splits.map((split) => ({
         ...split,
-        subtotalMinor: Number(split.subtotalMinor),
+        subtotalMinor: safeIntegerNumber(split.subtotalMinor, 'Order split subtotal'),
         purchaseOrder: split.purchaseOrder ? this.purchaseOrderView(split.purchaseOrder) : null,
       })),
     };
@@ -1251,10 +1265,10 @@ export class CommerceRepository {
   >(purchaseOrder: T) {
     return {
       ...purchaseOrder,
-      totalMinor: Number(purchaseOrder.totalMinor),
+      totalMinor: safeIntegerNumber(purchaseOrder.totalMinor, 'Purchase-order total'),
       lines: purchaseOrder.lines.map((line) => ({
         ...line,
-        unitCostMinor: Number(line.unitCostMinor),
+        unitCostMinor: safeIntegerNumber(line.unitCostMinor, 'Purchase-order unit cost'),
       })),
     };
   }

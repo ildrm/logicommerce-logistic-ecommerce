@@ -1,10 +1,4 @@
-import {
-  createHmac,
-  randomBytes,
-  randomUUID,
-  sign as cryptoSign,
-  timingSafeEqual,
-} from 'node:crypto';
+import { createHash, randomBytes, randomUUID, sign as cryptoSign } from 'node:crypto';
 import {
   BadGatewayException,
   BadRequestException,
@@ -13,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { parseEnvironment } from '@logicommerce/config';
 import { boundedJson } from '../platform/bounded-http.js';
+import { verifyCoinbaseSignature, verifyStripeSignature } from './payment-signatures.js';
 
 type SessionInput = {
   provider: 'STRIPE' | 'COINBASE' | 'MOCK';
@@ -22,15 +17,6 @@ type SessionInput = {
   invoiceId: string;
   invoiceNumber: string;
 };
-
-function signatureParts(signature: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const part of signature.split(',')) {
-    const [key, value] = part.split('=', 2);
-    if (key && value) result[key] = value;
-  }
-  return result;
-}
 
 @Injectable()
 export class PaymentProviderService {
@@ -108,59 +94,44 @@ export class PaymentProviderService {
         status: result.status === 'succeeded' ? 'COMPLETED' : 'PENDING',
       };
     }
-    const token = this.coinbaseJwt('POST', `/api/v1/checkouts/${input.providerReference}/refunds`);
-    const { response, body: result } = await this.requestJson<{ id?: string; status?: string }>(
-      `https://business.coinbase.com/api/v1/checkouts/${encodeURIComponent(input.providerReference)}/refunds`,
-      {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${token}`,
-          'content-type': 'application/json',
-          'x-idempotency-key': input.idempotencyKey,
-        },
-        body: JSON.stringify({
-          amount: (input.amountMinor / 100).toFixed(2),
-          currency: 'USDC',
-          reason: input.reason,
-        }),
-      },
+    const url = this.coinbaseUrl(
+      `/checkouts/${encodeURIComponent(input.providerReference)}/refund`,
     );
-    if (!response.ok || !result.id) throw new BadGatewayException('Coinbase refund failed');
+    const token = this.coinbaseJwt('POST', url);
+    const { response, body: result } = await this.requestJson<{
+      refund?: { id?: string; status?: string };
+    }>(url.toString(), {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'x-idempotency-key': this.coinbaseIdempotencyKey('refund', input.idempotencyKey),
+      },
+      body: JSON.stringify({
+        amount: (input.amountMinor / 100).toFixed(2),
+        currency: 'USDC',
+        reason: input.reason,
+      }),
+    });
+    if (!response.ok || !result.refund?.id) {
+      throw new BadGatewayException('Coinbase refund failed');
+    }
     return {
-      reference: result.id,
-      status: result.status === 'COMPLETED' ? 'COMPLETED' : 'PENDING',
+      reference: result.refund.id,
+      status: result.refund.status === 'COMPLETED' ? 'COMPLETED' : 'PENDING',
     };
   }
 
   verifyStripe(body: string, signature: string) {
     const secret = this.environment.STRIPE_WEBHOOK_SECRET;
     if (!secret) throw new ServiceUnavailableException('Stripe webhook is not configured');
-    const parts = signatureParts(signature);
-    const timestamp = Number(parts.t);
-    if (!timestamp || Math.abs(Date.now() / 1000 - timestamp) > 300) return false;
-    const expected = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
-    return this.safeEqual(parts.v1, expected);
+    return verifyStripeSignature(body, signature, secret);
   }
 
   verifyCoinbase(body: string, signature: string, headers: Record<string, string>) {
     const secret = this.environment.COINBASE_WEBHOOK_SECRET;
     if (!secret) throw new ServiceUnavailableException('Coinbase webhook is not configured');
-    const values = signatureParts(signature);
-    const timestamp = Number(values.t);
-    if (!timestamp || Math.abs(Date.now() / 1000 - timestamp) > 300) return false;
-    const signedHeaderNames: string[] = String(values.h ?? '')
-      .split(' ')
-      .filter(Boolean);
-    const signedHeaderValues = signedHeaderNames
-      .map((name) => headers[name.toLowerCase()] ?? '')
-      .join('.');
-    const candidates = [
-      `${timestamp}.${body}`,
-      `${timestamp}.${values.h ?? ''}.${signedHeaderValues}.${body}`,
-    ];
-    return candidates.some((candidate) =>
-      this.safeEqual(createHmac('sha256', secret).update(candidate).digest('hex'), values.v1),
-    );
+    return verifyCoinbaseSignature(body, signature, headers, secret);
   }
 
   private providerEnabled(provider: 'STRIPE' | 'COINBASE') {
@@ -211,18 +182,18 @@ export class PaymentProviderService {
         'Crypto checkout currently supports USD invoices settled as USDC',
       );
     }
-    const path = '/api/v1/checkouts';
-    const token = this.coinbaseJwt('POST', path);
+    const url = this.coinbaseUrl('/checkouts');
+    const token = this.coinbaseJwt('POST', url);
     const { response, body: result } = await this.requestJson<{
       id?: string;
       url?: string;
       expiresAt?: string;
-    }>(`https://business.coinbase.com${path}`, {
+    }>(url.toString(), {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
-        'x-idempotency-key': input.idempotencyKey,
+        'x-idempotency-key': this.coinbaseIdempotencyKey('checkout', input.idempotencyKey),
       },
       body: JSON.stringify({
         amount: (input.amountMinor / 100).toFixed(2),
@@ -244,7 +215,7 @@ export class PaymentProviderService {
     };
   }
 
-  private coinbaseJwt(method: string, path: string) {
+  private coinbaseJwt(method: string, url: URL) {
     const keyId = this.environment.COINBASE_API_KEY_ID;
     const secret = this.environment.COINBASE_API_KEY_SECRET?.replaceAll('\\n', '\n');
     if (!keyId || !secret) throw new ServiceUnavailableException('Coinbase is not configured');
@@ -261,7 +232,7 @@ export class PaymentProviderService {
       iss: 'cdp',
       nbf: now,
       exp: now + 120,
-      uri: `${method} business.coinbase.com${path}`,
+      uri: `${method} ${url.host}${url.pathname}`,
     });
     const unsigned = `${header}.${payload}`;
     const signature = cryptoSign('sha256', Buffer.from(unsigned), {
@@ -271,17 +242,22 @@ export class PaymentProviderService {
     return `${unsigned}.${signature}`;
   }
 
+  private coinbaseUrl(path: string): URL {
+    return new URL(`${this.environment.COINBASE_API_BASE_URL}${path}`);
+  }
+
+  private coinbaseIdempotencyKey(purpose: string, value: string): string {
+    const bytes = createHash('sha256').update(`${purpose}:${value}`).digest().subarray(0, 16);
+    bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+    const hex = bytes.toString('hex');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
   private async requestJson<T>(url: string, init: RequestInit) {
     return boundedJson<T>(url, init, {
       timeoutMs: this.environment.PROVIDER_HTTP_TIMEOUT_MS,
       maxResponseBytes: this.environment.PROVIDER_HTTP_MAX_RESPONSE_BYTES,
     });
-  }
-
-  private safeEqual(left: string | undefined, right: string | undefined) {
-    if (!left || !right) return false;
-    const leftBuffer = Buffer.from(left);
-    const rightBuffer = Buffer.from(right);
-    return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
   }
 }

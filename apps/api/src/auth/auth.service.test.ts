@@ -20,6 +20,8 @@ const user: AuthenticatedUser = {
 describe('AuthService', () => {
   let store: AuthStore;
   let passwordVerify: ReturnType<typeof vi.fn>;
+  let passwordHash: ReturnType<typeof vi.fn>;
+  let registerCustomer: ReturnType<typeof vi.fn<AuthStore['registerCustomer']>>;
   let findPasswordUser: ReturnType<typeof vi.fn<AuthStore['findPasswordUser']>>;
   let createSession: ReturnType<typeof vi.fn<AuthStore['createSession']>>;
   let rotateRefreshToken: ReturnType<typeof vi.fn<AuthStore['rotateRefreshToken']>>;
@@ -28,10 +30,12 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     findPasswordUser = vi.fn<AuthStore['findPasswordUser']>();
+    registerCustomer = vi.fn<AuthStore['registerCustomer']>();
     createSession = vi.fn<AuthStore['createSession']>();
     rotateRefreshToken = vi.fn<AuthStore['rotateRefreshToken']>();
     recordAudit = vi.fn<AuthStore['recordAudit']>();
     store = {
+      registerCustomer,
       findPasswordUser,
       findUserById: vi.fn(),
       createSession,
@@ -44,7 +48,8 @@ describe('AuthService', () => {
       recordAudit,
     };
     passwordVerify = vi.fn();
-    const passwords = { verify: passwordVerify } as unknown as PasswordService;
+    passwordHash = vi.fn().mockResolvedValue('password-hash');
+    const passwords = { verify: passwordVerify, hash: passwordHash } as unknown as PasswordService;
     const tokens = new AuthTokenService({
       accessSecret: 'access-secret-that-is-at-least-32-characters',
       refreshPepper: 'refresh-pepper-that-is-at-least-32-characters',
@@ -84,6 +89,36 @@ describe('AuthService', () => {
       context,
       expect.objectContaining({ action: 'auth.login.succeeded', actorId: user.id }),
     );
+  });
+
+  it('registers a customer with the tenant default role and starts a session', async () => {
+    const customer = {
+      ...user,
+      email: 'customer@example.com',
+      displayName: 'Customer',
+      roles: ['customer'],
+      permissions: ['cart.use'],
+    };
+    registerCustomer.mockResolvedValue({ status: 'created', user: customer });
+
+    const result = await service.register(
+      context,
+      {
+        email: ' CUSTOMER@EXAMPLE.COM ',
+        displayName: ' Customer ',
+        password: 'long-password-value',
+      },
+      { ip: '192.168.1.8' },
+    );
+
+    expect(passwordHash).toHaveBeenCalledWith('long-password-value');
+    expect(registerCustomer).toHaveBeenCalledWith(context, {
+      email: 'customer@example.com',
+      displayName: 'Customer',
+      passwordHash: 'password-hash',
+    });
+    expect(result.user).toEqual(customer);
+    expect(createSession).toHaveBeenCalledOnce();
   });
 
   it('uses the same verifier path and generic error for an unknown identity', async () => {

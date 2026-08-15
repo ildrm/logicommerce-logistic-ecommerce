@@ -6,7 +6,12 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { DatabaseClient, Prisma, TenantContext } from '@logicommerce/database';
+import {
+  safeIntegerNumber,
+  type DatabaseClient,
+  type Prisma,
+  type TenantContext,
+} from '@logicommerce/database';
 import { DATABASE } from '../database/database.module.js';
 import { IdentityService } from '../identity/identity.service.js';
 import type {
@@ -302,7 +307,13 @@ export class PartnerRepository {
       },
       include: { lines: true },
     });
-    if (prior) return { ...prior, totalMinor: Number(prior.totalMinor), idempotentReplay: true };
+    if (prior) {
+      return {
+        ...prior,
+        totalMinor: safeIntegerNumber(prior.totalMinor, 'Shop-order total'),
+        idempotentReplay: true,
+      };
+    }
     const variants = await this.db.productVariant.findMany({
       where: {
         tenantId: context.tenantId,
@@ -358,7 +369,11 @@ export class PartnerRepository {
         status: order.status,
       },
     );
-    return { ...order, totalMinor: Number(order.totalMinor), idempotentReplay: false };
+    return {
+      ...order,
+      totalMinor: safeIntegerNumber(order.totalMinor, 'Shop-order total'),
+      idempotentReplay: false,
+    };
   }
 
   async fulfillOrder(

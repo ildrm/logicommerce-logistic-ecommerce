@@ -1,15 +1,21 @@
 {
   "version": 1,
-  "description": "Release-critical authorization, authentication abuse protection, and uploaded-document scanning controls.",
+  "description": "Release-critical authorization, abuse protection, webhook authenticity, numeric safety, and document scanning controls.",
   "tests": [
     "apps/api/src/auth/auth-rate-limit.service.test.ts",
     "apps/api/src/auth/permission.guard.test.ts",
-    "apps/api/src/freight/document-scanner.service.test.ts"
+    "apps/api/src/freight/document-scanner.service.test.ts",
+    "apps/api/src/billing/payment-provider.service.test.ts",
+    "apps/api/src/platform/safe-integer.pipe.test.ts",
+    "apps/api/src/platform/json-safe.interceptor.test.ts"
   ],
   "sources": [
     "apps/api/src/auth/auth-rate-limit.service.ts",
     "apps/api/src/auth/permission.guard.ts",
-    "apps/api/src/freight/document-scanner.service.ts"
+    "apps/api/src/freight/document-scanner.service.ts",
+    "apps/api/src/billing/payment-signatures.ts",
+    "apps/api/src/platform/safe-integer.pipe.ts",
+    "apps/api/src/platform/json-safe.interceptor.ts"
   ],
   "thresholds": {
     "lines": 80,

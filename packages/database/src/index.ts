@@ -12,6 +12,14 @@ export function requireTenantId(context: TenantContext): string {
   return context.tenantId;
 }
 
+export function safeIntegerNumber(value: bigint | number, label = 'Integer'): number {
+  const converted = Number(value);
+  if (!Number.isSafeInteger(converted)) {
+    throw new RangeError(`${label} exceeds JavaScript's safe integer range`);
+  }
+  return converted;
+}
+
 export function tenantScopedWhere<T extends object, K extends string = 'tenantId'>(
   context: TenantContext,
   where: T,
@@ -21,17 +29,9 @@ export function tenantScopedWhere<T extends object, K extends string = 'tenantId
 }
 
 export function createDatabaseClient() {
-  const adapter = new PrismaMariaDb({
-    host: process.env.DATABASE_HOST ?? 'localhost',
-    port: Number(process.env.DATABASE_PORT ?? '3306'),
-    user: process.env.DATABASE_USER ?? 'logicommerce',
-    password: process.env.DATABASE_PASSWORD ?? '',
-    database: process.env.DATABASE_NAME ?? 'logicommerce',
-    connectionLimit: 10,
-    allowPublicKeyRetrieval:
-      process.env.DATABASE_ALLOW_PUBLIC_KEY_RETRIEVAL === 'true' ||
-      process.env.NODE_ENV !== 'production',
-  });
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) throw new Error('DATABASE_URL is required');
+  const adapter = new PrismaMariaDb(connectionString);
   return new PrismaClient({ adapter });
 }
 

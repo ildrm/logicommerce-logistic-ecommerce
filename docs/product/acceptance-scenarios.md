@@ -24,7 +24,7 @@ after every provider-dependent step in that deployment has evidence.
 
 ## Scenario B — C2C transaction
 
-1. A person registers.
+1. A person registers with a tenant that has enabled customer registration.
 2. The person completes seller onboarding.
 3. The seller creates a used-product listing.
 4. A moderator approves the listing.
