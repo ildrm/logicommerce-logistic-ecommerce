@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { AppHeader } from '../components/app-header';
 import { accessToken, authenticatedRequest } from '../components/authenticated-api';
+import { scaledDecimalFormValue } from '../components/form-values';
 
 function formText(form: FormData, key: string) {
   const value = form.get(key);
@@ -149,7 +150,7 @@ export function TransportConsole({ surface }: { surface: 'freight' | 'dispatch' 
   async function quote(event: FormEvent<HTMLFormElement>, request: RequestRow) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const amount = Math.round(Number(form.get('amount')) * 100);
+    const amount = scaledDecimalFormValue(form.get('amount'), 2, 'Amount');
     await action(async () => {
       const created = await authenticatedRequest<{ id: string }>(
         `/freight/operations/requests/${request.id}/quotes`,
@@ -315,6 +316,7 @@ export function TransportConsole({ surface }: { surface: 'freight' | 'dispatch' 
       () =>
         authenticatedRequest(`/billing/operations/payments/${session.id}/refunds`, {
           method: 'POST',
+          headers: { 'idempotency-key': crypto.randomUUID() },
           body: JSON.stringify({
             amountMinor: Math.min(session.amountMinor, invoice.paidMinor),
             reason: 'Operations-approved customer refund',

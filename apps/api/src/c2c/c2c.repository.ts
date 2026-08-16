@@ -175,17 +175,17 @@ export class C2CRepository {
     idempotencyKey: string,
     input: CreateC2COfferDto,
   ): Promise<unknown> {
-    if (idempotencyKey.trim().length < 8 || idempotencyKey.length > 160) {
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+    if (normalizedIdempotencyKey.length < 8 || normalizedIdempotencyKey.length > 160) {
       throw new ConflictException('A valid Idempotency-Key header is required');
     }
     const replay = await this.db.c2COffer.findFirst({
       where: {
         tenantId: context.tenantId,
-        buyerUserId: principal.userId,
-        paymentIdempotencyKey: idempotencyKey,
+        paymentIdempotencyKey: normalizedIdempotencyKey,
       },
     });
-    if (replay) return replay;
+    if (replay) return this.assertOfferReplay(replay, principal.userId, listingId, input);
     const listing = await this.db.c2CListing.findFirst({
       where: {
         id: listingId,
@@ -220,7 +220,7 @@ export class C2CRepository {
       tenantId: context.tenantId,
       buyerUserId: principal.userId,
       listingId,
-      idempotencyKey,
+      idempotencyKey: normalizedIdempotencyKey,
       expiresAt,
     });
     try {
@@ -243,7 +243,7 @@ export class C2CRepository {
             amountMinor: input.amountMinor,
             paymentProvider: hold.provider,
             paymentReference: hold.reference,
-            paymentIdempotencyKey: idempotencyKey,
+            paymentIdempotencyKey: normalizedIdempotencyKey,
             expiresAt,
           },
         });
@@ -252,12 +252,26 @@ export class C2CRepository {
       const concurrentReplay = await this.db.c2COffer.findFirst({
         where: {
           tenantId: context.tenantId,
-          buyerUserId: principal.userId,
-          paymentIdempotencyKey: idempotencyKey,
+          paymentIdempotencyKey: normalizedIdempotencyKey,
         },
       });
-      if (concurrentReplay) return concurrentReplay;
-      await this.payments.release(hold.reference, idempotencyKey);
+      if (concurrentReplay) {
+        const holdBelongsToReplay =
+          concurrentReplay.paymentProvider === hold.provider &&
+          concurrentReplay.paymentReference === hold.reference;
+        if (!holdBelongsToReplay) {
+          await this.payments.release(hold.reference, normalizedIdempotencyKey);
+        }
+        return this.assertOfferReplay(concurrentReplay, principal.userId, listingId, input);
+      }
+      const referenceOwner = await this.db.c2COffer.findFirst({
+        where: { paymentProvider: hold.provider, paymentReference: hold.reference },
+        select: { id: true },
+      });
+      if (referenceOwner) {
+        throw new ConflictException('Payment hold is already assigned to another offer');
+      }
+      await this.payments.release(hold.reference, normalizedIdempotencyKey);
       throw error;
     }
   }
@@ -531,6 +545,25 @@ export class C2CRepository {
         ...input,
       },
     });
+  }
+
+  private assertOfferReplay<
+    T extends {
+      readonly buyerUserId: string;
+      readonly listingId: string;
+      readonly parentOfferId: string | null;
+      readonly amountMinor: bigint;
+    },
+  >(offer: T, buyerUserId: string, listingId: string, input: CreateC2COfferDto): T {
+    if (
+      offer.buyerUserId !== buyerUserId ||
+      offer.listingId !== listingId ||
+      offer.parentOfferId !== (input.parentOfferId ?? null) ||
+      offer.amountMinor !== BigInt(input.amountMinor)
+    ) {
+      throw new ConflictException('Idempotency-Key was already used for another offer request');
+    }
+    return offer;
   }
 
   private async ownedListing(context: TenantContext, principal: AuthPrincipal, id: string) {

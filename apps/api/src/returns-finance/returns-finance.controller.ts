@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard.js';
 import { PermissionGuard } from '../auth/permission.guard.js';
@@ -37,8 +47,17 @@ export class ReturnsFinanceController {
   }
   @Post('returns')
   @RequirePermissions('return.use')
-  create(@Req() req: AuthenticatedRequest, @Body() input: CreateReturnDto) {
-    return this.repo.createReturn(this.contexts.get(), this.principal(req), input);
+  create(
+    @Req() req: AuthenticatedRequest,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body() input: CreateReturnDto,
+  ) {
+    return this.repo.createReturn(
+      this.contexts.get(),
+      this.principal(req),
+      idempotencyKey ?? '',
+      input,
+    );
   }
   @Post('returns/:id/approve')
   @RequirePermissions('return.manage')

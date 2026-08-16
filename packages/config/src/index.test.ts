@@ -69,6 +69,12 @@ describe('parseEnvironment', () => {
     ).toThrow('CORS_ORIGINS');
   });
 
+  it('rejects public base URLs that are not bare HTTP origins', () => {
+    expect(() =>
+      parseEnvironment({ ...valid, PUBLIC_BASE_URL: 'https://app.example.com/tenant?mode=test' }),
+    ).toThrow('PUBLIC_BASE_URL');
+  });
+
   it('rejects repository placeholders in production', () => {
     expect(() =>
       parseEnvironment({

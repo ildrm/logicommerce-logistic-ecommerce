@@ -13,6 +13,72 @@ const principal = {
 };
 
 describe('C2C payment release durability', () => {
+  it('rejects reuse of an offer idempotency key with changed parameters', async () => {
+    const payments = { hold: vi.fn(), release: vi.fn() };
+    const database = {
+      c2COffer: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: '00000000-0000-4000-8000-000000000050',
+          buyerUserId: principal.userId,
+          listingId: '00000000-0000-4000-8000-000000000051',
+          parentOfferId: null,
+          amountMinor: 10_000n,
+        }),
+      },
+    };
+    const repository = new C2CRepository(database as never, {} as never, payments as never);
+
+    await expect(
+      repository.offer(
+        context,
+        principal as never,
+        '00000000-0000-4000-8000-000000000052',
+        ' reused-offer-key ',
+        { amountMinor: 12_000, paymentToken: 'tok_valid' },
+      ),
+    ).rejects.toThrow('another offer request');
+    expect(payments.hold).not.toHaveBeenCalled();
+    expect(payments.release).not.toHaveBeenCalled();
+  });
+
+  it('releases a distinct hold returned during an idempotency create race', async () => {
+    const concurrent = {
+      id: '00000000-0000-4000-8000-000000000050',
+      buyerUserId: principal.userId,
+      listingId: '00000000-0000-4000-8000-000000000051',
+      parentOfferId: null,
+      amountMinor: 10_000n,
+      paymentProvider: 'ESCROW',
+      paymentReference: 'hold-winning',
+    };
+    const database = {
+      c2COffer: {
+        findFirst: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(concurrent),
+      },
+      c2CListing: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: concurrent.listingId,
+          sellerUserId: '00000000-0000-4000-8000-000000000099',
+          currency: 'USD',
+        }),
+      },
+      $transaction: vi.fn().mockRejectedValue({ code: 'P2002' }),
+    };
+    const payments = {
+      hold: vi.fn().mockResolvedValue({ provider: 'ESCROW', reference: 'hold-losing-concurrent' }),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    const repository = new C2CRepository(database as never, {} as never, payments as never);
+
+    await expect(
+      repository.offer(context, principal as never, concurrent.listingId, 'new-offer-key', {
+        amountMinor: 10_000,
+        paymentToken: 'tok_valid',
+      }),
+    ).resolves.toBe(concurrent);
+    expect(payments.release).toHaveBeenCalledWith('hold-losing-concurrent', 'new-offer-key');
+  });
+
   it('queues the superseded parent hold in the counter transaction', async () => {
     const parent = {
       id: '00000000-0000-4000-8000-000000000010',

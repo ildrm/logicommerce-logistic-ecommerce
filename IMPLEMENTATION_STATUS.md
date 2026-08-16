@@ -36,14 +36,16 @@ checksum-and-length-bound staged uploads, durable C2C hold release, provider
 HTTP limits, frontend token refresh, and production CI/Compose gates.
 
 The repository is a **release candidate**, not an approved production release.
-The measured whole-API unit baseline is 12.50% lines. The focused
+The measured whole-API unit baseline is 17.43% lines. The focused
 domain-critical gate now covers webhook authenticity and numeric-boundary code
 at 98.87% lines and 86.58% branches, but the broader unit baseline remains too
 shallow for production assurance. Provider sandbox certification, licensed
 data and agreements, external penetration and regulatory review,
 backup/restore drills, secrets/telemetry/on-call integration, and an authorized
-green CI run remain release evidence. Continuous GPS and tenant-level freight
-feature-flag policy remain explicit product/deployment decisions.
+green CI run remain release evidence. Return-refund and settlement-payout
+actions fail closed in production until a durable disbursement provider is
+selected. Continuous GPS and tenant-level freight feature-flag policy remain
+explicit product/deployment decisions.
 
 ## Repository audit and remediation — 2026-08-16
 
@@ -53,11 +55,19 @@ feature-flag policy remain explicit product/deployment decisions.
 - Corrected Coinbase checkout/refund/webhook behavior, Stripe asynchronous
   events, durable refund reconciliation, payment-schedule reopening, credit
   allocation, and balanced refund/credit-note accounting.
+- Bound payment/refund/credit-note idempotency to the original command,
+  reconciled asynchronous Stripe refund state, blocked overlapping checkout
+  sessions, and refused captured overpayments pending manual reconciliation.
+- Bound C2C and ASN idempotency to complete commands, prevented duplicate ASN
+  stock, kept pending ASN lines from premature completion, and made return and
+  settlement quantity/ledger transitions concurrency-safe.
 - Replaced unsafe `BigInt` conversions in money and quantity paths with exact
-  arithmetic and checked API/event serialization boundaries.
+  arithmetic and checked API/event serialization boundaries; browser decimal
+  inputs now convert to minor units without floating-point rounding.
 - Hardened environment discovery, CORS and proxy trust, dependency health,
-  worker startup/retry behavior, Redis TLS configuration, line endings,
-  generated artifacts, product-image fallback, and production web assets.
+  worker startup/retry and fresh dependency probes, Redis TLS configuration,
+  line endings, generated artifacts, product-image fallback, and production web
+  assets.
 - Static, unit, coverage, audit, release-evidence, build, and Compose-render
   gates pass. The live Docker-backed regression could not be rerun because the
   local Docker Desktop WSL engine failed during bootstrap; no live result is

@@ -91,6 +91,7 @@ async function phase8(token, suffix) {
   const authorization = await json(
     await api('/returns-finance/returns', token, {
       method: 'POST',
+      headers: { 'idempotency-key': `phase8-11-return-${suffix}` },
       body: JSON.stringify({
         orderId: order.id,
         reasonCode: 'NOT_AS_EXPECTED',

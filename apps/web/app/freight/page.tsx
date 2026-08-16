@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { AppHeader } from '../components/app-header';
 import { accessToken, authenticatedRequest } from '../components/authenticated-api';
+import { scaledDecimalFormValue } from '../components/form-values';
 
 function formText(form: FormData, key: string) {
   const value = form.get(key);
@@ -167,9 +168,13 @@ export default function FreightPage() {
               description: form.get('cargoDescription'),
               packageType: form.get('packageType'),
               packageCount: Number(form.get('packageCount')),
-              weightGrams: Math.round(Number(form.get('weightKg')) * 1000),
+              weightGrams: scaledDecimalFormValue(form.get('weightKg'), 3, 'Weight'),
               currency: 'USD',
-              declaredValueMinor: Math.round(Number(form.get('declaredValue')) * 100),
+              declaredValueMinor: scaledDecimalFormValue(
+                form.get('declaredValue'),
+                2,
+                'Declared value',
+              ),
               hazardous: form.get('hazardous') === 'on',
             },
           ],
@@ -228,7 +233,11 @@ export default function FreightPage() {
             discoveredAt: form.get('discoveredAt'),
             lossLocation: form.get('lossLocation'),
             description: form.get('description'),
-            claimedAmountMinor: Math.round(Number(form.get('claimedAmount')) * 100),
+            claimedAmountMinor: scaledDecimalFormValue(
+              form.get('claimedAmount'),
+              2,
+              'Claimed amount',
+            ),
             currency: form.get('currency'),
           }),
         },

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   safeIntegerNumber,
@@ -20,6 +20,18 @@ import type {
   ReceiveAsnDto,
   TrackingEventDto,
 } from './fulfillment.dto.js';
+
+export function asnReceiptPayloadHash(input: ReceiveAsnDto): string {
+  const lines = input.lines
+    .map((line) => ({
+      lineId: line.lineId,
+      acceptedQty: line.acceptedQty,
+      rejectedQty: line.rejectedQty,
+      inspection: line.inspection,
+    }))
+    .sort((left, right) => left.lineId.localeCompare(right.lineId));
+  return createHash('sha256').update(JSON.stringify({ lines })).digest('hex');
+}
 
 @Injectable()
 export class FulfillmentRepository {
@@ -110,124 +122,232 @@ export class FulfillmentRepository {
     input: ReceiveAsnDto,
     idempotencyKey: string,
   ): Promise<unknown> {
-    this.requireIdempotency(idempotencyKey);
-    return this.db.$transaction(async (tx) => {
-      const asn = await tx.advanceShippingNotice.findFirst({
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+    this.requireIdempotency(normalizedIdempotencyKey);
+    if (new Set(input.lines.map((line) => line.lineId)).size !== input.lines.length) {
+      throw new ConflictException('Each ASN line may only appear once per receipt');
+    }
+    const payloadHash = asnReceiptPayloadHash(input);
+
+    try {
+      return await this.db.$transaction(async (tx) => {
+        const asn = await tx.advanceShippingNotice.findFirst({
+          where: { id: asnId, tenantId: context.tenantId },
+          include: { lines: true },
+        });
+        if (!asn) throw new NotFoundException('Resource not found');
+
+        const priorReceipt = await tx.asnReceiptCommand.findUnique({
+          where: {
+            tenantId_idempotencyKey: {
+              tenantId: context.tenantId,
+              idempotencyKey: normalizedIdempotencyKey,
+            },
+          },
+        });
+        if (priorReceipt) {
+          this.assertAsnReceiptReplay(priorReceipt, asnId, payloadHash);
+          return asn;
+        }
+        if (asn.status !== 'OPEN' && asn.status !== 'IN_PROGRESS') {
+          throw new ConflictException('ASN is not open for receiving');
+        }
+
+        for (const received of input.lines) {
+          const line = asn.lines.find((candidate) => candidate.id === received.lineId);
+          const receivedQuantity = received.acceptedQty + received.rejectedQty;
+          if (
+            !line ||
+            receivedQuantity < 1 ||
+            receivedQuantity > line.expectedQty ||
+            line.receivedQty !== 0 ||
+            line.inspection !== 'PENDING' ||
+            received.acceptedQty > 0 !== (received.inspection === 'PASSED')
+          ) {
+            throw new ConflictException('Invalid ASN receipt quantity or inspection');
+          }
+        }
+
+        await tx.asnReceiptCommand.create({
+          data: {
+            id: randomUUID(),
+            tenantId: context.tenantId,
+            asnId,
+            idempotencyKey: normalizedIdempotencyKey,
+            payloadHash,
+          },
+        });
+
+        for (const received of input.lines) {
+          const line = asn.lines.find((candidate) => candidate.id === received.lineId)!;
+          let inventoryItemId: string | undefined;
+          if (received.acceptedQty > 0) {
+            const variant = await tx.productVariant.findFirst({
+              where: { id: line.variantId, tenantId: context.tenantId },
+            });
+            if (!variant) throw new NotFoundException('Resource not found');
+            const item = await tx.inventoryItem.upsert({
+              where: {
+                tenantId_facilityId_sku: {
+                  tenantId: context.tenantId,
+                  facilityId: asn.facilityId,
+                  sku: variant.sku,
+                },
+              },
+              create: {
+                id: randomUUID(),
+                tenantId: context.tenantId,
+                facilityId: asn.facilityId,
+                sku: variant.sku,
+                productRef: variant.id,
+              },
+              update: { productRef: variant.id, version: { increment: 1 } },
+            });
+            inventoryItemId = item.id;
+            await tx.inventoryBalance.upsert({
+              where: {
+                tenantId_inventoryItemId_state: {
+                  tenantId: context.tenantId,
+                  inventoryItemId: item.id,
+                  state: 'ON_HAND',
+                },
+              },
+              create: {
+                id: randomUUID(),
+                tenantId: context.tenantId,
+                inventoryItemId: item.id,
+                state: 'ON_HAND',
+                quantity: received.acceptedQty,
+              },
+              update: {
+                quantity: { increment: received.acceptedQty },
+                version: { increment: 1 },
+              },
+            });
+            await tx.stockLedgerEntry.create({
+              data: {
+                id: randomUUID(),
+                tenantId: context.tenantId,
+                inventoryItemId: item.id,
+                state: 'ON_HAND',
+                quantityDelta: received.acceptedQty,
+                operation: 'RECEIVE',
+                reasonCode: 'ASN_RECEIPT',
+                sourceType: 'ASN_LINE',
+                sourceId: line.id,
+                idempotencyKey: `${normalizedIdempotencyKey}:${line.id}`,
+                correlationId: context.correlationId,
+                actorId: principal.userId,
+              },
+            });
+          }
+          await tx.asnLine.update({
+            where: { id: line.id },
+            data: {
+              ...(inventoryItemId ? { inventoryItemId } : {}),
+              receivedQty: received.acceptedQty + received.rejectedQty,
+              acceptedQty: received.acceptedQty,
+              rejectedQty: received.rejectedQty,
+              inspection: received.inspection,
+            },
+          });
+        }
+
+        const receivingBlockers = await tx.asnLine.count({
+          where: {
+            asnId,
+            tenantId: context.tenantId,
+            OR: [{ inspection: 'PENDING' }, { acceptedQty: { gt: 0 }, putawayAt: null }],
+          },
+        });
+        const updated = await tx.advanceShippingNotice.updateMany({
+          where: {
+            id: asn.id,
+            tenantId: context.tenantId,
+            version: asn.version,
+            status: { in: ['OPEN', 'IN_PROGRESS'] },
+          },
+          data: {
+            status: receivingBlockers === 0 ? 'COMPLETED' : 'IN_PROGRESS',
+            receivedAt: asn.receivedAt ?? new Date(),
+            version: { increment: 1 },
+          },
+        });
+        if (updated.count !== 1) {
+          throw new ConflictException('ASN was changed by another receipt');
+        }
+        return tx.advanceShippingNotice.findUniqueOrThrow({
+          where: { id: asn.id },
+          include: { lines: true },
+        });
+      });
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error)) throw error;
+      const priorReceipt = await this.db.asnReceiptCommand.findUnique({
+        where: {
+          tenantId_idempotencyKey: {
+            tenantId: context.tenantId,
+            idempotencyKey: normalizedIdempotencyKey,
+          },
+        },
+      });
+      if (!priorReceipt) throw error;
+      this.assertAsnReceiptReplay(priorReceipt, asnId, payloadHash);
+      const asn = await this.db.advanceShippingNotice.findFirst({
         where: { id: asnId, tenantId: context.tenantId },
         include: { lines: true },
       });
       if (!asn) throw new NotFoundException('Resource not found');
-      if (asn.status === 'COMPLETED') return asn;
-      for (const received of input.lines) {
-        const line = asn.lines.find((candidate) => candidate.id === received.lineId);
-        if (!line || received.acceptedQty + received.rejectedQty > line.expectedQty) {
-          throw new ConflictException('Invalid ASN receipt quantity');
-        }
-        const variant = await tx.productVariant.findFirst({
-          where: { id: line.variantId, tenantId: context.tenantId },
-        });
-        if (!variant) throw new NotFoundException('Resource not found');
-        const item = await tx.inventoryItem.upsert({
-          where: {
-            tenantId_facilityId_sku: {
-              tenantId: context.tenantId,
-              facilityId: asn.facilityId,
-              sku: variant.sku,
-            },
-          },
-          create: {
-            id: randomUUID(),
-            tenantId: context.tenantId,
-            facilityId: asn.facilityId,
-            sku: variant.sku,
-            productRef: variant.id,
-          },
-          update: { productRef: variant.id, version: { increment: 1 } },
-        });
-        if (received.acceptedQty > 0) {
-          await tx.inventoryBalance.upsert({
-            where: {
-              tenantId_inventoryItemId_state: {
-                tenantId: context.tenantId,
-                inventoryItemId: item.id,
-                state: 'ON_HAND',
-              },
-            },
-            create: {
-              id: randomUUID(),
-              tenantId: context.tenantId,
-              inventoryItemId: item.id,
-              state: 'ON_HAND',
-              quantity: received.acceptedQty,
-            },
-            update: { quantity: { increment: received.acceptedQty }, version: { increment: 1 } },
-          });
-          await tx.stockLedgerEntry.create({
-            data: {
-              id: randomUUID(),
-              tenantId: context.tenantId,
-              inventoryItemId: item.id,
-              state: 'ON_HAND',
-              quantityDelta: received.acceptedQty,
-              operation: 'RECEIVE',
-              reasonCode: 'ASN_RECEIPT',
-              sourceType: 'ASN_LINE',
-              sourceId: line.id,
-              idempotencyKey: `${idempotencyKey}:${line.id}`,
-              correlationId: context.correlationId,
-              actorId: principal.userId,
-            },
-          });
-        }
-        await tx.asnLine.update({
-          where: { id: line.id },
-          data: {
-            inventoryItemId: item.id,
-            receivedQty: received.acceptedQty + received.rejectedQty,
-            acceptedQty: received.acceptedQty,
-            rejectedQty: received.rejectedQty,
-            inspection: received.inspection,
-          },
-        });
-      }
-      return tx.advanceShippingNotice.update({
-        where: { id: asn.id },
-        data: { status: 'IN_PROGRESS', receivedAt: new Date(), version: { increment: 1 } },
-        include: { lines: true },
-      });
-    });
+      return asn;
+    }
   }
 
   async putaway(context: TenantContext, asnId: string, input: PutawayDto): Promise<unknown> {
-    const line = await this.db.asnLine.findFirst({
-      where: { id: input.lineId, tenantId: context.tenantId, asnId },
-      include: { asn: true },
-    });
-    const bin = await this.db.facilityBin.findFirst({
-      where: { id: input.binId, tenantId: context.tenantId },
-    });
-    if (!line || !bin || bin.facilityId !== line.asn.facilityId) {
-      throw new NotFoundException('Resource not found');
-    }
-    if (!line.inventoryItemId || line.inspection !== 'PASSED') {
-      throw new ConflictException('Only inspected accepted inventory can be put away');
-    }
-    await this.db.asnLine.update({
-      where: { id: line.id },
-      data: { putawayBinId: bin.id, putawayAt: new Date() },
-    });
-    const remaining = await this.db.asnLine.count({
-      where: { asnId, tenantId: context.tenantId, acceptedQty: { gt: 0 }, putawayAt: null },
-    });
-    if (remaining === 0) {
-      await this.db.advanceShippingNotice.update({
-        where: { id: asnId },
-        data: { status: 'COMPLETED', version: { increment: 1 } },
+    return this.db.$transaction(async (tx) => {
+      const [line, bin] = await Promise.all([
+        tx.asnLine.findFirst({
+          where: { id: input.lineId, tenantId: context.tenantId, asnId },
+          include: { asn: true },
+        }),
+        tx.facilityBin.findFirst({
+          where: { id: input.binId, tenantId: context.tenantId },
+        }),
+      ]);
+      if (!line || !bin || bin.facilityId !== line.asn.facilityId) {
+        throw new NotFoundException('Resource not found');
+      }
+      if (line.putawayAt && line.putawayBinId !== bin.id) {
+        throw new ConflictException('ASN line was already put away in another bin');
+      }
+      if (!line.putawayAt && line.asn.status !== 'IN_PROGRESS') {
+        throw new ConflictException('ASN is not ready for putaway');
+      }
+      if (!line.inventoryItemId || line.acceptedQty < 1 || line.inspection !== 'PASSED') {
+        throw new ConflictException('Only inspected accepted inventory can be put away');
+      }
+      if (!line.putawayAt) {
+        await tx.asnLine.update({
+          where: { id: line.id },
+          data: { putawayBinId: bin.id, putawayAt: new Date() },
+        });
+      }
+      const remaining = await tx.asnLine.count({
+        where: {
+          asnId,
+          tenantId: context.tenantId,
+          OR: [{ inspection: 'PENDING' }, { acceptedQty: { gt: 0 }, putawayAt: null }],
+        },
       });
-    }
-    return this.db.advanceShippingNotice.findUnique({
-      where: { id: asnId },
-      include: { lines: true },
+      if (remaining === 0 && line.asn.status === 'IN_PROGRESS') {
+        await tx.advanceShippingNotice.updateMany({
+          where: { id: asnId, tenantId: context.tenantId, status: 'IN_PROGRESS' },
+          data: { status: 'COMPLETED', version: { increment: 1 } },
+        });
+      }
+      return tx.advanceShippingNotice.findUnique({
+        where: { id: asnId },
+        include: { lines: true },
+      });
     });
   }
 
@@ -484,6 +604,20 @@ export class FulfillmentRepository {
     if (value.trim().length < 8 || value.length > 160) {
       throw new ConflictException('A valid Idempotency-Key header is required');
     }
+  }
+
+  private assertAsnReceiptReplay(
+    receipt: { asnId: string; payloadHash: string },
+    asnId: string,
+    payloadHash: string,
+  ) {
+    if (receipt.asnId !== asnId || receipt.payloadHash !== payloadHash) {
+      throw new ConflictException('Idempotency-Key was already used for another ASN receipt');
+    }
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
   }
 
   private async requireFacility(context: TenantContext, id: string) {

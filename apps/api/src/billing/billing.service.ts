@@ -27,7 +27,14 @@ type ProviderEvent = {
   metadata?: Record<string, string>;
   updatedAt?: string;
   refunds?: Array<{ id?: string; status?: string }>;
-  data?: { object?: { id?: string; payment_status?: string; metadata?: Record<string, string> } };
+  data?: {
+    object?: {
+      id?: string;
+      status?: string;
+      payment_status?: string;
+      metadata?: Record<string, string>;
+    };
+  };
 };
 
 function safeMoneyNumber(amount: bigint): number {
@@ -104,10 +111,17 @@ export class BillingService {
     idempotencyKey: string,
     input: CreatePaymentSessionDto,
   ) {
-    if (idempotencyKey.length < 8 || idempotencyKey.length > 160) {
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+    if (normalizedIdempotencyKey.length < 8 || normalizedIdempotencyKey.length > 160) {
       throw new ConflictException('A valid Idempotency-Key header is required');
     }
     const invoice = await this.invoice(context, principal, invoiceId);
+    const existing = await this.db.paymentSession.findFirst({
+      where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
+    });
+    if (existing) {
+      return this.assertPaymentSessionReplay(existing, invoice.schedules, input);
+    }
     if (['PAID', 'VOID'].includes(invoice.status)) {
       throw new ConflictException('Invoice does not accept another payment');
     }
@@ -117,40 +131,118 @@ export class BillingService {
     if (!schedule) throw new ConflictException('No payable schedule remains');
     const remainingMinor = schedule.amountMinor - schedule.paidMinor - schedule.creditedMinor;
     if (remainingMinor <= 0n) throw new ConflictException('Payment schedule is already paid');
-    const remaining = safeMoneyNumber(remainingMinor);
-    const existing = await this.db.paymentSession.findFirst({
-      where: { tenantId: context.tenantId, idempotencyKey },
-    });
-    if (existing) return existing;
-    const providerSession = await this.providers.createSession({
-      provider: input.provider,
-      idempotencyKey,
-      amountMinor: remaining,
-      currency: invoice.currency,
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.number,
-    });
-    const created = await this.db.paymentSession.create({
-      data: {
-        id: randomUUID(),
+    const lockAcquired = await this.db.invoicePaymentSchedule.updateMany({
+      where: {
+        id: schedule.id,
         tenantId: context.tenantId,
-        scheduleId: schedule.id,
-        provider: input.provider,
-        providerReference: providerSession.reference,
-        amountMinor: remaining,
-        currency: invoice.currency,
-        checkoutUrl: providerSession.checkoutUrl,
-        idempotencyKey,
-        expiresAt: providerSession.expiresAt,
+        OR: [{ checkoutLockKey: null }, { checkoutLockUntil: { lte: new Date() } }],
+      },
+      data: {
+        checkoutLockKey: normalizedIdempotencyKey,
+        checkoutLockUntil: new Date(Date.now() + 120_000),
       },
     });
-    if (input.provider === 'MOCK') {
-      await this.processSuccessfulPayment(created.id, `mock-event-${created.id}`, {
-        source: 'development-mock',
+    if (lockAcquired.count !== 1) {
+      const concurrent = await this.db.paymentSession.findFirst({
+        where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
       });
-      return this.db.paymentSession.findUnique({ where: { id: created.id } });
+      if (concurrent) return this.assertPaymentSessionReplay(concurrent, invoice.schedules, input);
+      throw new ConflictException('This payment schedule is creating another checkout session');
     }
-    return created;
+    let retainScheduleLock = false;
+    try {
+      const currentSchedule = await this.db.invoicePaymentSchedule.findFirst({
+        where: { id: schedule.id, tenantId: context.tenantId },
+      });
+      if (!currentSchedule || currentSchedule.status === 'PAID') {
+        throw new ConflictException('Payment schedule is already paid');
+      }
+      const currentRemainingMinor =
+        currentSchedule.amountMinor - currentSchedule.paidMinor - currentSchedule.creditedMinor;
+      if (currentRemainingMinor <= 0n) {
+        throw new ConflictException('Payment schedule is already paid');
+      }
+      const remaining = safeMoneyNumber(currentRemainingMinor);
+      const activeSession = await this.db.paymentSession.findFirst({
+        where: {
+          tenantId: context.tenantId,
+          scheduleId: schedule.id,
+          status: 'PENDING',
+          expiresAt: { gt: new Date() },
+        },
+      });
+      if (activeSession) {
+        throw new ConflictException('This payment schedule already has an active checkout session');
+      }
+      const providerSession = await this.providers.createSession({
+        provider: input.provider,
+        idempotencyKey: normalizedIdempotencyKey,
+        amountMinor: remaining,
+        currency: invoice.currency,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.number,
+      });
+      let created;
+      let createdHere = true;
+      try {
+        created = await this.db.paymentSession.create({
+          data: {
+            id: randomUUID(),
+            tenantId: context.tenantId,
+            scheduleId: schedule.id,
+            provider: input.provider,
+            providerReference: providerSession.reference,
+            amountMinor: remaining,
+            currency: invoice.currency,
+            checkoutUrl: providerSession.checkoutUrl,
+            idempotencyKey: normalizedIdempotencyKey,
+            expiresAt: providerSession.expiresAt,
+          },
+        });
+      } catch (error) {
+        if (!this.isUniqueConstraintError(error)) throw error;
+        const concurrent = await this.db.paymentSession.findFirst({
+          where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
+        });
+        if (!concurrent) {
+          throw new ConflictException('A conflicting payment session already exists');
+        }
+        created = this.assertPaymentSessionReplay(concurrent, invoice.schedules, input);
+        createdHere = false;
+      }
+      if (created.status === 'PENDING') {
+        const retained = await this.db.invoicePaymentSchedule.updateMany({
+          where: {
+            id: schedule.id,
+            tenantId: context.tenantId,
+            checkoutLockKey: normalizedIdempotencyKey,
+          },
+          data: { checkoutLockUntil: created.expiresAt },
+        });
+        if (retained.count !== 1) {
+          throw new ConflictException('Payment schedule checkout lock was lost');
+        }
+        retainScheduleLock = true;
+      }
+      if (input.provider === 'MOCK' && createdHere) {
+        await this.processSuccessfulPayment(created.id, `mock-event-${created.id}`, {
+          source: 'development-mock',
+        });
+        return this.db.paymentSession.findUnique({ where: { id: created.id } });
+      }
+      return created;
+    } finally {
+      if (!retainScheduleLock) {
+        await this.db.invoicePaymentSchedule.updateMany({
+          where: {
+            id: schedule.id,
+            tenantId: context.tenantId,
+            checkoutLockKey: normalizedIdempotencyKey,
+          },
+          data: { checkoutLockKey: null, checkoutLockUntil: null },
+        });
+      }
+    }
   }
 
   async stripeWebhook(rawBody: Buffer, signature: string) {
@@ -160,6 +252,22 @@ export class BillingService {
     }
     const event = this.parseProviderEvent(body);
     const object = event.data?.object;
+    if (
+      ['refund.created', 'refund.updated', 'refund.failed', 'charge.refund.updated'].includes(
+        event.type ?? '',
+      )
+    ) {
+      return this.receiveStripeRefundEvent({
+        eventId: event.id ?? '',
+        eventType: event.type ?? '',
+        providerReference: object?.id ?? '',
+        ...(object?.metadata?.logicommerce_refund_id
+          ? { localRefundId: object.metadata.logicommerce_refund_id }
+          : {}),
+        status: object?.status ?? '',
+        payload: event,
+      });
+    }
     return this.receiveProviderEvent({
       provider: 'STRIPE',
       eventId: event.id ?? '',
@@ -187,10 +295,12 @@ export class BillingService {
       eventId: `payload-${createHash('sha256').update(body).digest('hex')}`,
       eventType: event.eventType ?? '',
       providerReference: event.id ?? '',
-      success: event.eventType === 'checkout.payment.success' || event.status === 'COMPLETED',
+      success:
+        event.eventType === 'checkout.payment.success' ||
+        (!event.eventType && event.status === 'COMPLETED'),
       failed:
         ['checkout.payment.failed', 'checkout.payment.expired'].includes(event.eventType ?? '') ||
-        ['FAILED', 'EXPIRED'].includes(event.status ?? ''),
+        (!event.eventType && ['FAILED', 'EXPIRED'].includes(event.status ?? '')),
       payload: event,
       ...(event.refunds ? { refunds: event.refunds } : {}),
     });
@@ -203,13 +313,14 @@ export class BillingService {
     idempotencyKey: string,
     input: RefundPaymentDto,
   ) {
-    if (idempotencyKey.trim().length < 8 || idempotencyKey.length > 160) {
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+    if (normalizedIdempotencyKey.length < 8 || normalizedIdempotencyKey.length > 160) {
       throw new ConflictException('A valid Idempotency-Key header is required');
     }
     const prior = await this.db.paymentRefund.findFirst({
-      where: { tenantId: context.tenantId, idempotencyKey },
-      include: { session: true },
+      where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
     });
+    if (prior) this.assertRefundReplay(prior, sessionId, input);
     if (prior?.providerReference || (prior && prior.status !== 'PENDING')) {
       if (prior.status === 'COMPLETED' && !prior.appliedAt) await this.applyRefund(prior.id);
       return this.db.paymentRefund.findUniqueOrThrow({ where: { id: prior.id } });
@@ -221,7 +332,7 @@ export class BillingService {
         .$transaction(
           async (tx) => {
             const replay = await tx.paymentRefund.findFirst({
-              where: { tenantId: context.tenantId, idempotencyKey },
+              where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
             });
             if (replay) return replay;
             const session = await tx.paymentSession.findFirst({
@@ -241,7 +352,7 @@ export class BillingService {
                 tenantId: context.tenantId,
                 invoiceId: session.schedule.invoiceId,
                 sessionId,
-                idempotencyKey,
+                idempotencyKey: normalizedIdempotencyKey,
                 amountMinor: input.amountMinor,
                 reason: input.reason,
                 status: 'PENDING',
@@ -269,26 +380,25 @@ export class BillingService {
         )
         .catch(async (error: unknown) => {
           const concurrent = await this.db.paymentRefund.findFirst({
-            where: { tenantId: context.tenantId, idempotencyKey },
+            where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
           });
           if (concurrent) return concurrent;
           throw error;
         }));
 
-    if (intent.sessionId !== sessionId) {
-      throw new ConflictException('Idempotency-Key was already used for another payment');
-    }
+    this.assertRefundReplay(intent, sessionId, input);
     const session = await this.db.paymentSession.findFirst({
       where: { id: sessionId, tenantId: context.tenantId, status: 'COMPLETED' },
     });
     if (!session) throw new NotFoundException('Resource not found');
     try {
       const provider = await this.providers.refund({
+        refundId: intent.id,
         provider: session.provider,
         providerReference: session.providerReference,
         amountMinor: safeMoneyNumber(intent.amountMinor),
         reason: intent.reason,
-        idempotencyKey,
+        idempotencyKey: normalizedIdempotencyKey,
       });
       const refund = await this.db.paymentRefund.update({
         where: { id: intent.id },
@@ -316,143 +426,172 @@ export class BillingService {
     context: TenantContext,
     principal: AuthPrincipal,
     invoiceId: string,
+    idempotencyKey: string,
     input: IssueCreditNoteDto,
   ) {
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+    if (normalizedIdempotencyKey.length < 8 || normalizedIdempotencyKey.length > 160) {
+      throw new ConflictException('A valid Idempotency-Key header is required');
+    }
     await this.invoice(context, principal, invoiceId, true);
-    return this.db.$transaction(
-      async (tx) => {
-        const invoice = await tx.billingInvoice.findFirst({
-          where: { id: invoiceId, tenantId: context.tenantId, status: { not: 'VOID' } },
-          include: { schedules: { orderBy: { sequence: 'asc' } } },
-        });
-        if (!invoice) throw new NotFoundException('Resource not found');
-        const amount = BigInt(input.amountMinor);
-        if (invoice.creditedMinor + amount > invoice.totalMinor) {
-          throw new ConflictException('Credit notes exceed invoice total');
-        }
-        const [adjustment, receivable] = await Promise.all([
-          tx.financialAccount.findFirst({
-            where: {
-              tenantId: context.tenantId,
-              code: '5000',
-              currency: invoice.currency,
-              active: true,
-            },
-          }),
-          tx.financialAccount.findFirst({
-            where: {
-              tenantId: context.tenantId,
-              code: '1100',
-              currency: invoice.currency,
-              active: true,
-            },
-          }),
-        ]);
-        if (!adjustment || !receivable) {
-          throw new ServiceUnavailableException(
-            'Finance chart is not configured for this currency',
-          );
-        }
-        const id = randomUUID();
-        const note = await tx.creditNote.create({
-          data: {
-            id,
-            tenantId: context.tenantId,
-            invoiceId,
-            number: `CRN-${new Date().getUTCFullYear()}-${id.slice(0, 8).toUpperCase()}`,
-            amountMinor: amount,
-            reason: input.reason,
-            issuedBy: principal.userId,
-          },
-        });
-        let unallocated = amount;
-        for (const schedule of invoice.schedules) {
-          if (unallocated === 0n) break;
-          const outstanding = schedule.amountMinor - schedule.paidMinor - schedule.creditedMinor;
-          if (outstanding <= 0n) continue;
-          const applied = outstanding < unallocated ? outstanding : unallocated;
-          const settled =
-            schedule.paidMinor + schedule.creditedMinor + applied >= schedule.amountMinor;
-          await tx.invoicePaymentSchedule.update({
-            where: { id: schedule.id },
+    const prior = await this.db.creditNote.findFirst({
+      where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
+    });
+    if (prior) return this.assertCreditNoteReplay(prior, invoiceId, input);
+    try {
+      return await this.db.$transaction(
+        async (tx) => {
+          const invoice = await tx.billingInvoice.findFirst({
+            where: { id: invoiceId, tenantId: context.tenantId, status: { not: 'VOID' } },
+            include: { schedules: { orderBy: { sequence: 'asc' } } },
+          });
+          if (!invoice) throw new NotFoundException('Resource not found');
+          const replay = await tx.creditNote.findFirst({
+            where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
+          });
+          if (replay) return this.assertCreditNoteReplay(replay, invoiceId, input);
+          const amount = BigInt(input.amountMinor);
+          if (invoice.creditedMinor + amount > invoice.totalMinor) {
+            throw new ConflictException('Credit notes exceed invoice total');
+          }
+          const [adjustment, receivable] = await Promise.all([
+            tx.financialAccount.findFirst({
+              where: {
+                tenantId: context.tenantId,
+                code: '5000',
+                currency: invoice.currency,
+                active: true,
+              },
+            }),
+            tx.financialAccount.findFirst({
+              where: {
+                tenantId: context.tenantId,
+                code: '1100',
+                currency: invoice.currency,
+                active: true,
+              },
+            }),
+          ]);
+          if (!adjustment || !receivable) {
+            throw new ServiceUnavailableException(
+              'Finance chart is not configured for this currency',
+            );
+          }
+          const id = randomUUID();
+          const note = await tx.creditNote.create({
             data: {
-              creditedMinor: { increment: applied },
-              status: settled ? 'PAID' : 'PARTIALLY_PAID',
+              id,
+              tenantId: context.tenantId,
+              invoiceId,
+              number: `CRN-${new Date().getUTCFullYear()}-${id.slice(0, 8).toUpperCase()}`,
+              idempotencyKey: normalizedIdempotencyKey,
+              amountMinor: amount,
+              reason: input.reason,
+              issuedBy: principal.userId,
             },
           });
-          unallocated -= applied;
-        }
-        if (unallocated !== 0n) {
-          throw new ConflictException('Credit note exceeds the unpaid scheduled balance');
-        }
-        const settled = invoice.paidMinor + invoice.creditedMinor + amount >= invoice.totalMinor;
-        await tx.billingInvoice.update({
-          where: { id: invoice.id },
-          data: {
-            creditedMinor: { increment: amount },
-            status: settled ? 'PAID' : invoice.paidMinor > 0n ? 'PARTIALLY_PAID' : 'ISSUED',
-            version: { increment: 1 },
-          },
-        });
-        const journalId = randomUUID();
-        await tx.journalEntry.create({
-          data: {
-            id: journalId,
-            tenantId: context.tenantId,
-            number: `CRN-${journalId.slice(0, 8).toUpperCase()}`,
-            sourceType: 'CREDIT_NOTE',
-            sourceId: note.id,
-            description: `Credit note ${note.number} for ${invoice.number}`,
-            currency: invoice.currency,
-            idempotencyKey: `credit-note:${note.id}`,
-            postedBy: principal.userId,
-            lines: {
-              create: [
-                {
-                  id: randomUUID(),
-                  tenantId: context.tenantId,
-                  accountId: adjustment.id,
-                  debitMinor: amount,
-                },
-                {
-                  id: randomUUID(),
-                  tenantId: context.tenantId,
-                  accountId: receivable.id,
-                  creditMinor: amount,
-                },
-              ],
+          let unallocated = amount;
+          for (const schedule of invoice.schedules) {
+            if (unallocated === 0n) break;
+            const outstanding = schedule.amountMinor - schedule.paidMinor - schedule.creditedMinor;
+            if (outstanding <= 0n) continue;
+            const applied = outstanding < unallocated ? outstanding : unallocated;
+            const settled =
+              schedule.paidMinor + schedule.creditedMinor + applied >= schedule.amountMinor;
+            const credited = await tx.invoicePaymentSchedule.updateMany({
+              where: {
+                id: schedule.id,
+                tenantId: context.tenantId,
+                OR: [{ checkoutLockKey: null }, { checkoutLockUntil: { lte: new Date() } }],
+              },
+              data: {
+                creditedMinor: { increment: applied },
+                status: settled ? 'PAID' : 'PARTIALLY_PAID',
+              },
+            });
+            if (credited.count !== 1) {
+              throw new ConflictException('Invoice has an active checkout session');
+            }
+            unallocated -= applied;
+          }
+          if (unallocated !== 0n) {
+            throw new ConflictException('Credit note exceeds the unpaid scheduled balance');
+          }
+          const settled = invoice.paidMinor + invoice.creditedMinor + amount >= invoice.totalMinor;
+          await tx.billingInvoice.update({
+            where: { id: invoice.id },
+            data: {
+              creditedMinor: { increment: amount },
+              status: settled ? 'PAID' : 'PARTIALLY_PAID',
+              version: { increment: 1 },
             },
-          },
-        });
-        await tx.auditEvent.create({
-          data: {
-            id: randomUUID(),
-            tenantId: context.tenantId,
-            actorId: principal.userId,
-            actorType: 'USER',
-            action: 'billing.credit-note.issued',
-            entityType: 'CREDIT_NOTE',
-            entityId: note.id,
-            reason: input.reason,
-            requestId: context.correlationId,
-            correlationId: context.correlationId,
-            metadata: { invoiceId, amountMinor: input.amountMinor },
-          },
-        });
-        await tx.outboxEvent.create({
-          data: {
-            id: randomUUID(),
-            tenantId: context.tenantId,
-            type: 'billing.credit-note.issued.v1',
-            subject: `invoice/${invoiceId}`,
-            payload: { invoiceId, creditNoteId: note.id, amountMinor: input.amountMinor },
-            correlationId: context.correlationId,
-          },
-        });
-        return note;
-      },
-      { isolationLevel: 'Serializable' },
-    );
+          });
+          const journalId = randomUUID();
+          await tx.journalEntry.create({
+            data: {
+              id: journalId,
+              tenantId: context.tenantId,
+              number: `CRN-${journalId.slice(0, 8).toUpperCase()}`,
+              sourceType: 'CREDIT_NOTE',
+              sourceId: note.id,
+              description: `Credit note ${note.number} for ${invoice.number}`,
+              currency: invoice.currency,
+              idempotencyKey: `credit-note:${note.id}`,
+              postedBy: principal.userId,
+              lines: {
+                create: [
+                  {
+                    id: randomUUID(),
+                    tenantId: context.tenantId,
+                    accountId: adjustment.id,
+                    debitMinor: amount,
+                  },
+                  {
+                    id: randomUUID(),
+                    tenantId: context.tenantId,
+                    accountId: receivable.id,
+                    creditMinor: amount,
+                  },
+                ],
+              },
+            },
+          });
+          await tx.auditEvent.create({
+            data: {
+              id: randomUUID(),
+              tenantId: context.tenantId,
+              actorId: principal.userId,
+              actorType: 'USER',
+              action: 'billing.credit-note.issued',
+              entityType: 'CREDIT_NOTE',
+              entityId: note.id,
+              reason: input.reason,
+              requestId: context.correlationId,
+              correlationId: context.correlationId,
+              metadata: { invoiceId, amountMinor: input.amountMinor },
+            },
+          });
+          await tx.outboxEvent.create({
+            data: {
+              id: randomUUID(),
+              tenantId: context.tenantId,
+              type: 'billing.credit-note.issued.v1',
+              subject: `invoice/${invoiceId}`,
+              payload: { invoiceId, creditNoteId: note.id, amountMinor: input.amountMinor },
+              correlationId: context.correlationId,
+            },
+          });
+          return note;
+        },
+        { isolationLevel: 'Serializable' },
+      );
+    } catch (error) {
+      const concurrent = await this.db.creditNote.findFirst({
+        where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
+      });
+      if (concurrent) return this.assertCreditNoteReplay(concurrent, invoiceId, input);
+      throw error;
+    }
   }
 
   async document(context: TenantContext, principal: AuthPrincipal, invoiceId: string, all = false) {
@@ -513,6 +652,14 @@ export class BillingService {
             where: { id: session.id, status: 'PENDING' },
             data: { status: 'FAILED' },
           }),
+          this.db.invoicePaymentSchedule.updateMany({
+            where: {
+              id: session.scheduleId,
+              tenantId: session.tenantId,
+              checkoutLockKey: session.idempotencyKey,
+            },
+            data: { checkoutLockKey: null, checkoutLockUntil: null },
+          }),
           this.db.paymentEvent.update({
             where: { id: event.id },
             data: { status: 'PROCESSED', processedAt: new Date() },
@@ -550,6 +697,104 @@ export class BillingService {
     } catch {
       throw new BadRequestException('Payment webhook payload must be valid JSON');
     }
+  }
+
+  private async receiveStripeRefundEvent(input: {
+    eventId: string;
+    eventType: string;
+    providerReference: string;
+    localRefundId?: string;
+    status: string;
+    payload: ProviderEvent;
+  }) {
+    if (!input.eventId || !input.providerReference) {
+      throw new ConflictException('Refund event identity is missing');
+    }
+    const refund = await this.db.paymentRefund.findFirst({
+      where: {
+        OR: [
+          { providerReference: input.providerReference },
+          ...(input.localRefundId ? [{ id: input.localRefundId }] : []),
+        ],
+        session: { provider: 'STRIPE' },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        sessionId: true,
+        providerReference: true,
+      },
+    });
+    if (!refund) return { received: true, ignored: true };
+    if (refund.providerReference && refund.providerReference !== input.providerReference) {
+      throw new ConflictException('Refund event does not match the stored provider reference');
+    }
+    const event = await this.db.paymentEvent.upsert({
+      where: {
+        provider_providerEventId: { provider: 'STRIPE', providerEventId: input.eventId },
+      },
+      update: {},
+      create: {
+        id: randomUUID(),
+        tenantId: refund.tenantId,
+        sessionId: refund.sessionId,
+        provider: 'STRIPE',
+        providerEventId: input.eventId,
+        eventType: input.eventType,
+        payloadHash: createHash('sha256').update(JSON.stringify(input.payload)).digest('hex'),
+        payload: input.payload as Prisma.InputJsonValue,
+      },
+    });
+    if (event.status === 'PROCESSED') return { received: true, duplicate: true };
+    const claimed = await this.db.paymentEvent.updateMany({
+      where: { id: event.id, status: { in: ['RECEIVED', 'FAILED'] } },
+      data: { status: 'PROCESSING', error: null },
+    });
+    if (claimed.count !== 1) {
+      throw new ServiceUnavailableException('Refund event is already being processed');
+    }
+    try {
+      if (input.status === 'succeeded') {
+        await this.db.paymentRefund.updateMany({
+          where: { id: refund.id, tenantId: refund.tenantId, status: { not: 'COMPLETED' } },
+          data: {
+            providerReference: input.providerReference,
+            status: 'COMPLETED',
+            completedAt: new Date(),
+            lastError: null,
+          },
+        });
+        await this.applyRefund(refund.id);
+      } else if (input.status === 'failed' || input.status === 'canceled') {
+        await this.db.paymentRefund.updateMany({
+          where: { id: refund.id, tenantId: refund.tenantId, status: { not: 'COMPLETED' } },
+          data: {
+            providerReference: input.providerReference,
+            status: 'FAILED',
+            lastError: `Stripe reported refund status ${input.status}`,
+          },
+        });
+      } else if (!refund.providerReference) {
+        await this.db.paymentRefund.updateMany({
+          where: { id: refund.id, tenantId: refund.tenantId, providerReference: null },
+          data: { providerReference: input.providerReference },
+        });
+      }
+      await this.db.paymentEvent.update({
+        where: { id: event.id },
+        data: { status: 'PROCESSED', processedAt: new Date() },
+      });
+    } catch (error) {
+      await this.db.paymentEvent.updateMany({
+        where: { id: event.id, status: 'PROCESSING' },
+        data: {
+          status: 'FAILED',
+          error: error instanceof Error ? error.message.slice(0, 1000) : 'Processing failed',
+        },
+      });
+      throw error;
+    }
+    return { received: true };
   }
 
   private async reconcileCoinbaseRefunds(
@@ -600,6 +845,13 @@ export class BillingService {
       }
       const invoice = session.schedule.invoice;
       const amount = session.amountMinor;
+      const remainingMinor =
+        session.schedule.amountMinor - session.schedule.paidMinor - session.schedule.creditedMinor;
+      if (amount > remainingMinor) {
+        throw new ConflictException(
+          'Captured payment exceeds the remaining schedule balance and requires reconciliation',
+        );
+      }
       const paidMinor = invoice.paidMinor + amount;
       const fullyPaid = paidMinor + invoice.creditedMinor >= invoice.totalMinor;
       await tx.paymentAllocation.create({
@@ -621,6 +873,8 @@ export class BillingService {
         where: { id: session.scheduleId },
         data: {
           paidMinor: { increment: amount },
+          checkoutLockKey: null,
+          checkoutLockUntil: null,
           status:
             session.schedule.paidMinor + session.schedule.creditedMinor + amount >=
             session.schedule.amountMinor
@@ -856,6 +1110,60 @@ export class BillingService {
         },
       });
     });
+  }
+
+  private assertPaymentSessionReplay<
+    T extends { readonly scheduleId: string; readonly provider: string },
+  >(session: T, schedules: readonly { readonly id: string }[], input: CreatePaymentSessionDto): T {
+    const belongsToInvoice = schedules.some((schedule) => schedule.id === session.scheduleId);
+    if (
+      !belongsToInvoice ||
+      session.provider !== input.provider ||
+      (input.scheduleId !== undefined && input.scheduleId !== session.scheduleId)
+    ) {
+      throw new ConflictException('Idempotency-Key was already used for another payment request');
+    }
+    return session;
+  }
+
+  private assertRefundReplay<
+    T extends {
+      readonly sessionId: string;
+      readonly amountMinor: bigint;
+      readonly reason: string;
+    },
+  >(refund: T, sessionId: string, input: RefundPaymentDto): T {
+    if (
+      refund.sessionId !== sessionId ||
+      refund.amountMinor !== BigInt(input.amountMinor) ||
+      refund.reason !== input.reason
+    ) {
+      throw new ConflictException('Idempotency-Key was already used for another refund request');
+    }
+    return refund;
+  }
+
+  private assertCreditNoteReplay<
+    T extends {
+      readonly invoiceId: string;
+      readonly amountMinor: bigint;
+      readonly reason: string;
+    },
+  >(creditNote: T, invoiceId: string, input: IssueCreditNoteDto): T {
+    if (
+      creditNote.invoiceId !== invoiceId ||
+      creditNote.amountMinor !== BigInt(input.amountMinor) ||
+      creditNote.reason !== input.reason
+    ) {
+      throw new ConflictException(
+        'Idempotency-Key was already used for another credit-note request',
+      );
+    }
+    return creditNote;
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
   }
 
   private async businessAccountIds(context: TenantContext, principal: AuthPrincipal) {

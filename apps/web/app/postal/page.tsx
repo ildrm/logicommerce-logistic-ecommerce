@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { AppHeader } from '../components/app-header';
 import { accessToken, authenticatedRequest } from '../components/authenticated-api';
+import { scaledDecimalFormValue } from '../components/form-values';
 
 function formText(form: FormData, key: string): string {
   const value = form.get(key);
@@ -87,8 +88,12 @@ export default function PostalPage() {
             address: form.get('recipientAddress'),
           },
           contentDescription: form.get('contentDescription'),
-          weightGrams: Math.round(Number(form.get('weightKg')) * 1000),
-          declaredValueMinor: Math.round(Number(form.get('declaredValue')) * 100),
+          weightGrams: scaledDecimalFormValue(form.get('weightKg'), 3, 'Weight'),
+          declaredValueMinor: scaledDecimalFormValue(
+            form.get('declaredValue'),
+            2,
+            'Declared value',
+          ),
           currency: form.get('currency'),
           customsData: {
             category: form.get('customsCategory'),

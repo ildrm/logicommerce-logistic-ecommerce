@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { AppHeader } from '../components/app-header';
 import { accessToken, authenticatedRequest } from '../components/authenticated-api';
+import { scaledDecimalFormValue } from '../components/form-values';
 
 function formText(form: FormData, key: string): string {
   const value = form.get(key);
@@ -397,7 +398,11 @@ export function InternationalConsole({ surface }: { surface: Surface }) {
                     type: form.get('type'),
                     externalIdentifier: form.get('externalIdentifier'),
                     currentHubId: form.get('currentHubId') || undefined,
-                    grossWeightGrams: Math.round(Number(form.get('weightKg')) * 1000),
+                    grossWeightGrams: scaledDecimalFormValue(
+                      form.get('weightKg'),
+                      3,
+                      'Gross weight',
+                    ),
                   }),
                   'Handling unit registered.',
                 )
@@ -561,9 +566,17 @@ export function InternationalConsole({ surface }: { surface: Surface }) {
                       .map((value) => value.trim()),
                     currency: 'USD',
                     rateBasisPoints: Number(values.get('rateBasisPoints')),
-                    minimumPremiumMinor: Math.round(Number(values.get('minimumPremium')) * 100),
+                    minimumPremiumMinor: scaledDecimalFormValue(
+                      values.get('minimumPremium'),
+                      2,
+                      'Minimum premium',
+                    ),
                     deductibleType: 'FIXED',
-                    deductibleValue: Math.round(Number(values.get('deductible')) * 100),
+                    deductibleValue: scaledDecimalFormValue(
+                      values.get('deductible'),
+                      2,
+                      'Deductible',
+                    ),
                     valuationUpliftPercent: 10,
                     effectiveAt: new Date(formText(values, 'effectiveAt')).toISOString(),
                   }),
@@ -615,7 +628,7 @@ export function InternationalConsole({ surface }: { surface: Surface }) {
                     coverageStartAt: new Date(formText(form, 'coverageStartAt')).toISOString(),
                     coverageEndAt: new Date(formText(form, 'coverageEndAt')).toISOString(),
                     validUntil: new Date(formText(form, 'validUntil')).toISOString(),
-                    taxMinor: Math.round(Number(form.get('tax')) * 100),
+                    taxMinor: scaledDecimalFormValue(form.get('tax'), 2, 'Tax'),
                   }),
                   'Cargo-insurance quote issued.',
                 )

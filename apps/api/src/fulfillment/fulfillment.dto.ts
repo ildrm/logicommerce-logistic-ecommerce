@@ -47,8 +47,8 @@ export class CreateAsnDto {
 
 export class ReceiveAsnLineDto {
   @IsUUID('4') lineId!: string;
-  @IsInt() @Min(0) acceptedQty!: number;
-  @IsInt() @Min(0) rejectedQty!: number;
+  @IsInt() @Min(0) @Max(1_000_000) acceptedQty!: number;
+  @IsInt() @Min(0) @Max(1_000_000) rejectedQty!: number;
   @IsIn(['PASSED', 'FAILED']) inspection!: 'PASSED' | 'FAILED';
 }
 

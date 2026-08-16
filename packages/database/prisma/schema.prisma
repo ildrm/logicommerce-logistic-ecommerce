@@ -220,44 +220,44 @@ enum WebhookDeliveryStatus {
 }
 
 model Tenant {
-  id                   String                  @id @db.Char(36)
-  slug                 String                  @unique @db.VarChar(80)
-  name                 String                  @db.VarChar(160)
-  status               TenantStatus            @default(ACTIVE)
-  defaultLocale        String                  @default("en") @db.VarChar(20)
-  defaultCurrency      String                  @default("USD") @db.Char(3)
-  selfRegistrationEnabled Boolean              @default(false)
-  version              Int                     @default(1)
-  createdAt            DateTime                @default(now()) @db.DateTime(3)
-  updatedAt            DateTime                @updatedAt @db.DateTime(3)
-  domains              TenantDomain[]
-  users                User[]
-  identityTokens       IdentityToken[]
-  mfaCredentials       MfaCredential[]
-  mfaRecoveryCodes     MfaRecoveryCode[]
-  apiCredentials       ApiCredential[]
-  roles                Role[]
-  stores               Store[]
-  categories           Category[]
-  attributeDefinitions AttributeDefinition[]
-  suppliers            Supplier[]
-  sellers              Seller[]
-  productSubmissions   ProductSubmission[]
-  products             Product[]
-  productVariants      ProductVariant[]
-  offers               Offer[]
-  promotions           Promotion[]
-  inventoryItems       InventoryItem[]
-  inventoryFeeds       InventoryFeed[]
-  carts                Cart[]
-  customerAddresses    CustomerAddress[]
-  orders               Order[]
-  orderLines           OrderLine[]
-  orderSplits          OrderSplit[]
-  purchaseOrders       DropshipPurchaseOrder[]
-  auditEvents          AuditEvent[]
-  outboxEvents         OutboxEvent[]
-  idempotencyKeys      IdempotencyRecord[]
+  id                      String                  @id @db.Char(36)
+  slug                    String                  @unique @db.VarChar(80)
+  name                    String                  @db.VarChar(160)
+  status                  TenantStatus            @default(ACTIVE)
+  defaultLocale           String                  @default("en") @db.VarChar(20)
+  defaultCurrency         String                  @default("USD") @db.Char(3)
+  selfRegistrationEnabled Boolean                 @default(false)
+  version                 Int                     @default(1)
+  createdAt               DateTime                @default(now()) @db.DateTime(3)
+  updatedAt               DateTime                @updatedAt @db.DateTime(3)
+  domains                 TenantDomain[]
+  users                   User[]
+  identityTokens          IdentityToken[]
+  mfaCredentials          MfaCredential[]
+  mfaRecoveryCodes        MfaRecoveryCode[]
+  apiCredentials          ApiCredential[]
+  roles                   Role[]
+  stores                  Store[]
+  categories              Category[]
+  attributeDefinitions    AttributeDefinition[]
+  suppliers               Supplier[]
+  sellers                 Seller[]
+  productSubmissions      ProductSubmission[]
+  products                Product[]
+  productVariants         ProductVariant[]
+  offers                  Offer[]
+  promotions              Promotion[]
+  inventoryItems          InventoryItem[]
+  inventoryFeeds          InventoryFeed[]
+  carts                   Cart[]
+  customerAddresses       CustomerAddress[]
+  orders                  Order[]
+  orderLines              OrderLine[]
+  orderSplits             OrderSplit[]
+  purchaseOrders          DropshipPurchaseOrder[]
+  auditEvents             AuditEvent[]
+  outboxEvents            OutboxEvent[]
+  idempotencyKeys         IdempotencyRecord[]
 }
 
 model TenantDomain {
@@ -1174,22 +1174,36 @@ model FacilityBin {
 }
 
 model AdvanceShippingNotice {
-  id         String          @id @db.Char(36)
-  tenantId   String          @db.Char(36)
-  facilityId String          @db.Char(36)
-  supplierId String?         @db.Char(36)
-  reference  String          @db.VarChar(120)
-  status     WarehouseStatus @default(OPEN)
-  expectedAt DateTime?       @db.DateTime(3)
-  receivedAt DateTime?       @db.DateTime(3)
-  version    Int             @default(1)
-  createdAt  DateTime        @default(now()) @db.DateTime(3)
-  updatedAt  DateTime        @updatedAt @db.DateTime(3)
-  facility   Facility        @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  id         String              @id @db.Char(36)
+  tenantId   String              @db.Char(36)
+  facilityId String              @db.Char(36)
+  supplierId String?             @db.Char(36)
+  reference  String              @db.VarChar(120)
+  status     WarehouseStatus     @default(OPEN)
+  expectedAt DateTime?           @db.DateTime(3)
+  receivedAt DateTime?           @db.DateTime(3)
+  version    Int                 @default(1)
+  createdAt  DateTime            @default(now()) @db.DateTime(3)
+  updatedAt  DateTime            @updatedAt @db.DateTime(3)
+  facility   Facility            @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   lines      AsnLine[]
+  receipts   AsnReceiptCommand[]
 
   @@unique([tenantId, reference])
   @@index([tenantId, facilityId, status])
+}
+
+model AsnReceiptCommand {
+  id             String                @id @db.Char(36)
+  tenantId       String                @db.Char(36)
+  asnId          String                @db.Char(36)
+  idempotencyKey String                @db.VarChar(160)
+  payloadHash    String                @db.Char(64)
+  createdAt      DateTime              @default(now()) @db.DateTime(3)
+  asn            AdvanceShippingNotice @relation(fields: [asnId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, asnId, createdAt])
 }
 
 model AsnLine {
@@ -1726,6 +1740,7 @@ model ReturnAuthorization {
   number           String             @db.VarChar(80)
   reasonCode       String             @db.VarChar(80)
   requestedOutcome String             @db.VarChar(40)
+  idempotencyKey   String?            @db.VarChar(160)
   status           String             @default("REQUESTED") @db.VarChar(40)
   labelUrl         String?            @db.VarChar(1000)
   trackingNumber   String?            @db.VarChar(160)
@@ -1742,6 +1757,7 @@ model ReturnAuthorization {
   dispute          ReturnDispute?
 
   @@unique([tenantId, number])
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId, orderId, status])
   @@index([tenantId, customerId, status])
 }
@@ -1882,7 +1898,7 @@ model SettlementLine {
   journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, settlementId, journalEntryId, kind])
-  @@index([tenantId, journalEntryId])
+  @@unique([tenantId, journalEntryId])
 }
 
 model ReconciliationRun {
@@ -2717,19 +2733,21 @@ model InvoiceLine {
 }
 
 model InvoicePaymentSchedule {
-  id          String              @id @db.Char(36)
-  tenantId    String              @db.Char(36)
-  invoiceId   String              @db.Char(36)
-  kind        String              @db.VarChar(40)
-  amountMinor BigInt
-  paidMinor   BigInt              @default(0)
-  creditedMinor BigInt            @default(0)
-  dueAt       DateTime            @db.DateTime(3)
-  status      String              @default("DUE") @db.VarChar(40)
-  sequence    Int
-  invoice     BillingInvoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  sessions    PaymentSession[]
-  allocations PaymentAllocation[]
+  id                String              @id @db.Char(36)
+  tenantId          String              @db.Char(36)
+  invoiceId         String              @db.Char(36)
+  kind              String              @db.VarChar(40)
+  amountMinor       BigInt
+  paidMinor         BigInt              @default(0)
+  creditedMinor     BigInt              @default(0)
+  dueAt             DateTime            @db.DateTime(3)
+  status            String              @default("DUE") @db.VarChar(40)
+  sequence          Int
+  checkoutLockKey   String?             @db.VarChar(160)
+  checkoutLockUntil DateTime?           @db.DateTime(3)
+  invoice           BillingInvoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sessions          PaymentSession[]
+  allocations       PaymentAllocation[]
 
   @@unique([tenantId, invoiceId, sequence])
   @@index([tenantId, status, dueAt])
@@ -2819,18 +2837,20 @@ model PaymentRefund {
 }
 
 model CreditNote {
-  id          String         @id @db.Char(36)
-  tenantId    String         @db.Char(36)
-  invoiceId   String         @db.Char(36)
-  number      String         @db.VarChar(80)
-  amountMinor BigInt
-  reason      String         @db.VarChar(500)
-  status      String         @default("ISSUED") @db.VarChar(40)
-  issuedBy    String         @db.Char(36)
-  issuedAt    DateTime       @default(now()) @db.DateTime(3)
-  invoice     BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  id             String         @id @db.Char(36)
+  tenantId       String         @db.Char(36)
+  invoiceId      String         @db.Char(36)
+  number         String         @db.VarChar(80)
+  idempotencyKey String?        @db.VarChar(160)
+  amountMinor    BigInt
+  reason         String         @db.VarChar(500)
+  status         String         @default("ISSUED") @db.VarChar(40)
+  issuedBy       String         @db.Char(36)
+  issuedAt       DateTime       @default(now()) @db.DateTime(3)
+  invoice        BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, number])
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId, invoiceId])
 }
 

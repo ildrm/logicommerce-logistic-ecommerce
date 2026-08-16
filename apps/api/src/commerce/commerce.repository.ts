@@ -190,7 +190,7 @@ export class CommerceRepository {
             inventoryItemId: item.id,
             variantId: variant.id,
             quantity: input.quantity,
-            delta: Number(delta),
+            delta: safeIntegerNumber(delta, 'Inventory feed delta'),
           },
           correlationId: context.correlationId,
         },
@@ -256,9 +256,9 @@ export class CommerceRepository {
           sku: item.sku,
           facilityId: item.facilityId,
           state,
-          balance: Number(balance),
-          ledgerTotal: Number(ledger),
-          difference: Number(balance - ledger),
+          balance: safeIntegerNumber(balance, 'Inventory reconciliation balance'),
+          ledgerTotal: safeIntegerNumber(ledger, 'Inventory reconciliation ledger total'),
+          difference: safeIntegerNumber(balance - ledger, 'Inventory reconciliation difference'),
           reconciled: balance === ledger,
         };
       });

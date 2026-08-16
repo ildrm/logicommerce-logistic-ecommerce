@@ -1,8 +1,17 @@
-import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class CreatePaymentSessionDto {
   @IsIn(['STRIPE', 'COINBASE', 'MOCK']) provider!: 'STRIPE' | 'COINBASE' | 'MOCK';
-  @IsOptional() @IsString() @MinLength(8) @MaxLength(160) scheduleId?: string;
+  @IsOptional() @IsUUID() scheduleId?: string;
 }
 
 export class RefundPaymentDto {

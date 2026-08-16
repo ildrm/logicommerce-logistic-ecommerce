@@ -1,9 +1,14 @@
 # API guidelines
 
-REST endpoints use `/api/v1`, UUID identifiers, JSON, cursor or page pagination,
-request/correlation IDs, explicit authorization, and problem-details responses.
-Create and transition operations require `Idempotency-Key`. Stack traces and
-record-existence details for unauthorized cross-tenant access are never returned.
+REST endpoints use `/api/v1`, UUID identifiers, JSON, request/correlation IDs,
+explicit authorization, and problem-details responses. Several collection
+contracts still return bounded tenant datasets without pagination; add a cursor
+contract before exposing them to high-volume tenants.
+Contracts that create external or financial side effects require
+`Idempotency-Key`; reuse with different parameters returns a conflict. Other
+domain commands use their declared external key, version, or state-transition
+guard. Stack traces and record-existence details for unauthorized cross-tenant
+access are never returned.
 
 Freight request, quote, booking, dispatch, billing, and payment contracts use
 the shared state enums in `@logicommerce/api-contracts`. Booking reads return

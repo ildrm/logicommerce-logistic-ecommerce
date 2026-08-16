@@ -17,7 +17,9 @@ COPY packages/tsconfig/package.json packages/tsconfig/package.json
 COPY packages/ui/package.json packages/ui/package.json
 COPY packages/validation/package.json packages/validation/package.json
 COPY tests/e2e/package.json tests/e2e/package.json
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+  pnpm config set store-dir /pnpm/store \
+  && pnpm install --frozen-lockfile --filter @logicommerce/api... --filter @logicommerce/database...
 COPY . .
 RUN pnpm db:generate
 
@@ -42,5 +44,5 @@ RUN apk add --no-cache libc6-compat openssl \
 COPY --from=builder --chown=logicommerce:logicommerce /runtime ./
 USER logicommerce
 EXPOSE 3001
-HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -q -O /dev/null http://127.0.0.1:3001/api/v1/health/live || exit 1
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -q -O /dev/null http://127.0.0.1:3001/api/v1/health/ready || exit 1
 CMD ["node", "dist/main.js"]

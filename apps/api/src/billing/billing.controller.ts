@@ -116,9 +116,16 @@ export class BillingOperationsController {
   creditNote(
     @Req() request: AuthenticatedRequest,
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body() input: IssueCreditNoteDto,
   ) {
-    return this.billing.creditNote(this.contexts.get(), this.principal(request), id, input);
+    return this.billing.creditNote(
+      this.contexts.get(),
+      this.principal(request),
+      id,
+      idempotencyKey ?? '',
+      input,
+    );
   }
 
   private principal(request: AuthenticatedRequest) {

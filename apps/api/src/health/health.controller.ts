@@ -1,4 +1,10 @@
-import { Controller, Get, Inject, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Inject,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { HealthStatus } from '@logicommerce/api-contracts';
 import type { DatabaseClient } from '@logicommerce/database';
@@ -23,7 +29,13 @@ export class HealthController {
   @Get('ready')
   @ApiOperation({ summary: 'Dependency readiness' })
   async ready(): Promise<HealthStatus> {
-    await Promise.all([this.database.$queryRaw`SELECT 1`, this.redis.ping()]);
+    try {
+      await Promise.all([this.database.$queryRaw`SELECT 1`, this.redis.ping()]);
+    } catch (error) {
+      throw new ServiceUnavailableException('Required dependencies are unavailable', {
+        cause: error,
+      });
+    }
     return { status: 'ok', service: 'api', version: '0.1.0', timestamp: new Date().toISOString() };
   }
 

@@ -34,8 +34,17 @@ work is recorded under `Unreleased` rather than rewriting historical limits.
 - Readiness checks for MySQL and Redis, worker retry/startup hardening, root
   environment loading, trusted-proxy restrictions, and cross-platform LF
   normalization.
+- Lean Docker build contexts and app-scoped workspace installs that exclude
+  local package stores, caches, coverage, and generated compiler state.
 - Billing credit allocation, refund reconciliation, invoice/schedule reopening,
   and balanced refund and credit-note journals.
+- Payload-bound ASN receipt commands, concurrency-safe inventory receiving,
+  complete-line putaway checks, and rejected-only ASN completion.
+- Idempotent return requests, return-quantity accounting across RMAs, complete
+  receipt/inspection guards, and database-enforced single settlement of each
+  posted journal.
+- Exact browser parsing for currency and weight form values, avoiding
+  floating-point rounding at API boundaries.
 - Production provider adapters and fail-closed configuration for commerce,
   carriers, KYC, C2C escrow, document scanning, SMTP, and partner webhooks.
 - Durable C2C hold-release processing, checksum/length-bound freight uploads,
@@ -126,6 +135,14 @@ work is recorded under `Unreleased` rather than rewriting historical limits.
   arithmetic, event, API, and PDF boundaries.
 - Prevented credit notes and refunds from leaving invoices, payment schedules,
   allocations, or double-entry journals inconsistent.
+- Bound checkout, refund, and credit-note idempotency keys to their original
+  parameters; rejected concurrent active checkouts and overpayment allocation.
+- Reconciled asynchronous Stripe refund events and Coinbase refund failures,
+  including webhook-before-response races through durable refund metadata.
+- Made API and worker container health dependency-aware and time-bounded rather
+  than accepting stale startup markers or process-only liveness.
+- Rejected insecure provider checkout URLs, malformed provider response fields,
+  and non-origin public base URLs.
 - Removed the C2C onboarding dead end by making customer registration an
   explicit, tenant-controlled flow.
 - Removed a high-severity transitive `nanoid` advisory and stopped tracking the
@@ -184,7 +201,7 @@ work is recorded under `Unreleased` rather than rewriting historical limits.
 - Freight tracking is an ordered operational milestone timeline. It does not
   claim continuous GPS tracking or a unified quote/payment/travel audit feed.
 - Domain-critical unit coverage is measured at 98.87% lines and 86.58%
-  branches, but whole-API line coverage remains 12.50%; broader service and
+  branches, but whole-API line coverage remains 17.43%; broader service and
   repository unit coverage is still required.
 - Authorized CI scan/SBOM output, external penetration testing, and a
   production-provider restore exercise remain release evidence.

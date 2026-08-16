@@ -9,9 +9,14 @@ custody, customs filing, or country-specific statutory e-invoicing.
 
 ## Activation sequence
 
-1. Deploy migration `20260728055751_phase12_transport_billing` and run the seed
-   twice. Confirm the `driver-coordinator` role has exactly the four transport
-   permissions documented in the permission matrix.
+1. Deploy every pending append-only migration, including
+   `202608160002_billing_credit_integrity` and
+   `202608160003_billing_idempotency_hardening`, and run the seed twice. Confirm
+   the `driver-coordinator` role has exactly the four transport permissions
+   documented in the permission matrix. Before migration 003, query
+   `SettlementLine` grouped by `tenantId, journalEntryId` and investigate any
+   count above one; the uniqueness migration deliberately will not discard
+   ambiguous financial history.
 2. Configure tenant billing identity, invoice currency, legal address, tax
    identifier, payment terms, and credit limits. Tenant-level freight feature
    flags are planned but are not implemented; restrict rollout through
@@ -66,6 +71,12 @@ not an accepted check-in source.
    provider-clearing debit equals the accounts-receivable credit.
 6. If an incorrect allocation posted, issue a provider refund and compensating
    journal/credit note. Never edit a posted journal or published invoice.
+7. Supply a stable, unique `Idempotency-Key` for checkout, refund, and credit-note
+   commands. Reusing a key with changed invoice, schedule, provider, amount, or
+   reason is an operational error and returns a conflict.
+8. A successful provider payment that exceeds the remaining schedule balance is
+   retained as a failed payment event for manual reconciliation; it must not be
+   force-posted or silently applied to another receivable.
 
 ## Stale driver check-in response
 

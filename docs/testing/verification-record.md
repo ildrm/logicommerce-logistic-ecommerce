@@ -654,19 +654,27 @@ measured coverage report, and broad domain coverage remains Phase 11 work.
   [repository-audit-2026-08-16.md](repository-audit-2026-08-16.md).
 - `pnpm exec turbo typecheck --output-logs=errors-only`, `pnpm lint`,
   `pnpm test`, `pnpm format:check`, and `pnpm build` passed. The unit pipeline
-  completed 18/18 tasks; API tests completed 19 files and 54 assertions; the
+  completed 18/18 tasks; API tests completed 21 files and 78 assertions; the
   production build completed 12/12 tasks and prerendered 18 web routes.
-- `pnpm test:coverage` passed with 12.50% whole-API line coverage.
-  `pnpm test:coverage:critical` passed 20 tests across six files at 98.87%
+- `pnpm test:coverage` passed with 17.43% whole-API line coverage.
+  `pnpm test:coverage:critical` passed 34 tests across seven files at 98.87%
   lines, 94.05% statements, 86.58% branches, and 95.83% functions.
+- The second audit pass added regression coverage for payment checkout leases,
+  C2C hold compensation, ASN receipt/putaway integrity, cumulative and
+  concurrent return handling, settlement journal uniqueness, and exact browser
+  decimal conversion. Production return refunds and settlement payouts now
+  fail closed until an external disbursement provider is selected.
 - `pnpm audit --prod --audit-level high` reported no known vulnerabilities.
   `pnpm test:release-evidence` passed 2/2 checks. Production Compose rendering
   with `infrastructure/production.env.example` also passed.
-- A full Compose rebuild was attempted after Docker Desktop was started. Image
-  transfer ended with BuildKit `EOF`; Docker Desktop then consistently failed
-  to start its WSL engine with `DockerDesktop/Wsl/ExecError` and exit status
-  `0xc00000fd`. Therefore migrations, seed, live API journeys, and Playwright
-  were not rerun, and this entry makes no new Docker-backed runtime claim.
+- Docker Desktop later became reachable and both Compose configurations
+  rendered, but the rebuild exposed an oversized context and parallel BuildKit
+  memory failure. Docker contexts now exclude pnpm/Turbo caches, nested
+  coverage, and TypeScript state, and app images install only their workspace
+  dependency graphs. Before the corrected build could be rerun, the WSL engine
+  failed again with `DockerDesktop/Wsl/ExecError` (`0xc0000409`). Therefore
+  migrations, seed, live API journeys, and Playwright were not rerun, and this
+  entry makes no new Docker-backed runtime claim.
 - External Stripe/Coinbase sandbox certification, provider agreements and
   licensed data, external penetration/regulatory review, authorized CI/SBOM
   evidence, and a production restore drill remain release prerequisites.

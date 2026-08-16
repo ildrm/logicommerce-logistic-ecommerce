@@ -740,7 +740,10 @@ export class CatalogRepository {
       ...product,
       variants: product.variants.map((variant) => ({
         ...variant,
-        availableQuantity: Number(available.get(variant.id) ?? 0n),
+        availableQuantity: safeIntegerNumber(
+          available.get(variant.id) ?? 0n,
+          'Available inventory quantity',
+        ),
         offers: variant.offers.map((offer) => this.offer(offer)),
       })),
     };

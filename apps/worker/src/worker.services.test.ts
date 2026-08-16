@@ -4,7 +4,9 @@ import type { DatabaseClient } from '@logicommerce/database';
 
 const mocks = vi.hoisted(() => ({
   close: vi.fn().mockResolvedValue(undefined),
+  disconnect: vi.fn(),
   error: vi.fn(),
+  ping: vi.fn().mockResolvedValue('PONG'),
 }));
 
 vi.mock('@logicommerce/config', () => ({
@@ -19,6 +21,13 @@ vi.mock('@logicommerce/observability', () => ({
 vi.mock('bullmq', () => ({
   Queue: class {
     close = mocks.close;
+  },
+}));
+vi.mock('ioredis', () => ({
+  Redis: class {
+    disconnect = mocks.disconnect;
+    on = vi.fn();
+    ping = mocks.ping;
   },
 }));
 
@@ -53,9 +62,24 @@ describe('worker services', () => {
   });
 
   it('writes its health marker to the operating-system temporary directory', async () => {
-    const health = new WorkerHealth();
+    const query = vi.fn().mockResolvedValue([{ ok: 1 }]);
+    const health = new WorkerHealth({ $queryRaw: query } as unknown as DatabaseClient);
     await health.onModuleInit();
     await expect(readFile(HEALTH_FILE, 'utf8')).resolves.toMatch(/^\d{4}-\d{2}-\d{2}T/u);
+    expect(query).toHaveBeenCalledOnce();
+    expect(mocks.ping).toHaveBeenCalledOnce();
+    await health.onApplicationShutdown();
+    expect(mocks.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('does not retain a healthy marker when a dependency probe fails', async () => {
+    mocks.ping.mockRejectedValueOnce(new Error('redis offline'));
+    const health = new WorkerHealth({
+      $queryRaw: vi.fn().mockResolvedValue([{ ok: 1 }]),
+    } as unknown as DatabaseClient);
+
+    await health.onModuleInit();
+    await expect(readFile(HEALTH_FILE, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     await health.onApplicationShutdown();
   });
 });

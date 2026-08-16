@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import {
   safeIntegerNumber,
   type DatabaseClient,
@@ -36,8 +42,18 @@ export class ReturnsFinanceRepository {
   async createReturn(
     context: TenantContext,
     principal: AuthPrincipal,
+    idempotencyKey: string,
     input: CreateReturnDto,
   ): Promise<unknown> {
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+    if (normalizedIdempotencyKey.length < 8 || normalizedIdempotencyKey.length > 160) {
+      throw new ConflictException('A valid Idempotency-Key header is required');
+    }
+    const prior = await this.db.returnAuthorization.findFirst({
+      where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
+      include: { lines: true },
+    });
+    if (prior) return this.assertReturnReplay(prior, principal.userId, input);
     const order = await this.db.order.findFirst({
       where: { id: input.orderId, tenantId: context.tenantId, userId: principal.userId },
       include: { lines: true },
@@ -52,26 +68,74 @@ export class ReturnsFinanceRepository {
         throw new ConflictException('Invalid return quantity');
     }
     const id = randomUUID();
-    return this.db.returnAuthorization.create({
-      data: {
-        id,
-        tenantId: context.tenantId,
-        orderId: order.id,
-        customerId: principal.userId,
-        number: `RMA-${id.slice(0, 8).toUpperCase()}`,
-        reasonCode: input.reasonCode,
-        requestedOutcome: input.requestedOutcome,
-        lines: {
-          create: input.lines.map((line) => ({
-            id: randomUUID(),
+    try {
+      return await this.db.$transaction(async (tx) => {
+        const claimedOrder = await tx.order.updateMany({
+          where: {
+            id: order.id,
             tenantId: context.tenantId,
-            orderLineId: line.orderLineId,
-            quantity: line.quantity,
-          })),
-        },
-      },
-      include: { lines: true },
-    });
+            userId: principal.userId,
+            version: order.version,
+          },
+          data: { version: { increment: 1 } },
+        });
+        if (claimedOrder.count !== 1) {
+          throw new ConflictException('Order was changed by another operation');
+        }
+        const priorReturnLines = await tx.returnLine.findMany({
+          where: {
+            tenantId: context.tenantId,
+            orderLineId: { in: [...requestedIds] },
+            returnAuthorization: { orderId: order.id },
+          },
+          select: { orderLineId: true, quantity: true },
+        });
+        const returnedByLine = new Map<string, number>();
+        for (const priorLine of priorReturnLines) {
+          returnedByLine.set(
+            priorLine.orderLineId,
+            (returnedByLine.get(priorLine.orderLineId) ?? 0) + priorLine.quantity,
+          );
+        }
+        for (const requested of input.lines) {
+          const ordered = order.lines.find((line) => line.id === requested.orderLineId)!;
+          if (
+            (returnedByLine.get(requested.orderLineId) ?? 0) + requested.quantity >
+            ordered.quantity
+          ) {
+            throw new ConflictException('Return quantity exceeds the unreturned order quantity');
+          }
+        }
+        return tx.returnAuthorization.create({
+          data: {
+            id,
+            tenantId: context.tenantId,
+            orderId: order.id,
+            customerId: principal.userId,
+            number: `RMA-${id.slice(0, 8).toUpperCase()}`,
+            reasonCode: input.reasonCode,
+            requestedOutcome: input.requestedOutcome,
+            idempotencyKey: normalizedIdempotencyKey,
+            lines: {
+              create: input.lines.map((line) => ({
+                id: randomUUID(),
+                tenantId: context.tenantId,
+                orderLineId: line.orderLineId,
+                quantity: line.quantity,
+              })),
+            },
+          },
+          include: { lines: true },
+        });
+      });
+    } catch (error) {
+      const concurrent = await this.db.returnAuthorization.findFirst({
+        where: { tenantId: context.tenantId, idempotencyKey: normalizedIdempotencyKey },
+        include: { lines: true },
+      });
+      if (concurrent) return this.assertReturnReplay(concurrent, principal.userId, input);
+      throw error;
+    }
   }
 
   async approveReturn(
@@ -105,21 +169,39 @@ export class ReturnsFinanceRepository {
     const record = await this.requireReturn(context, returnId);
     if (!['LABEL_ISSUED', 'IN_TRANSIT'].includes(record.status))
       throw new ConflictException('Return cannot be received from its current state');
+    if (
+      input.lines.length !== record.lines.length ||
+      new Set(input.lines.map((line) => line.lineId)).size !== input.lines.length
+    ) {
+      throw new ConflictException('Receiving must resolve every return line exactly once');
+    }
     for (const received of input.lines) {
       const line = record.lines.find((candidate) => candidate.id === received.lineId);
-      if (!line || received.quantity > line.quantity)
-        throw new ConflictException('Invalid received return quantity');
+      if (!line || received.quantity !== line.quantity) {
+        throw new ConflictException('Every returned unit must be received');
+      }
     }
     return this.db.$transaction(async (tx) => {
+      const claimed = await tx.returnAuthorization.updateMany({
+        where: {
+          id: record.id,
+          tenantId: context.tenantId,
+          status: { in: ['LABEL_ISSUED', 'IN_TRANSIT'] },
+          version: record.version,
+        },
+        data: { status: 'RECEIVED', receivedAt: new Date(), version: { increment: 1 } },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException('Return was changed by another operation');
+      }
       for (const received of input.lines) {
         await tx.returnLine.update({
           where: { id: received.lineId },
           data: { receivedQuantity: received.quantity },
         });
       }
-      return tx.returnAuthorization.update({
+      return tx.returnAuthorization.findUniqueOrThrow({
         where: { id: record.id },
-        data: { status: 'RECEIVED', receivedAt: new Date(), version: { increment: 1 } },
         include: { lines: true },
       });
     });
@@ -134,9 +216,30 @@ export class ReturnsFinanceRepository {
     const record = await this.requireReturn(context, returnId);
     if (record.status !== 'RECEIVED')
       throw new ConflictException('Only received returns can be inspected');
-    if (input.lines.length !== record.lines.length)
-      throw new ConflictException('Inspection must resolve every return line');
+    if (
+      input.lines.length !== record.lines.length ||
+      new Set(input.lines.map((line) => line.lineId)).size !== input.lines.length
+    ) {
+      throw new ConflictException('Inspection must resolve every return line exactly once');
+    }
+    if (process.env.NODE_ENV === 'production' && input.lines.some((line) => line.refundMinor > 0)) {
+      throw new ServiceUnavailableException(
+        'A production return-refund provider must be configured before issuing refunds',
+      );
+    }
     return this.db.$transaction(async (tx) => {
+      const claimed = await tx.returnAuthorization.updateMany({
+        where: {
+          id: record.id,
+          tenantId: context.tenantId,
+          status: 'RECEIVED',
+          version: record.version,
+        },
+        data: { version: { increment: 1 } },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictException('Return was changed by another operation');
+      }
       let refundMinor = 0n;
       for (const resolution of input.lines) {
         const line = record.lines.find((candidate) => candidate.id === resolution.lineId);
@@ -313,8 +416,10 @@ export class ReturnsFinanceRepository {
       where: {
         tenantId: context.tenantId,
         currency: input.currency.toUpperCase(),
+        status: 'POSTED',
         postedAt: { gte: start, lt: end },
         sourceId: input.partnerId,
+        settlementLines: { none: {} },
       },
       include: { lines: { include: { account: true } } },
     });
@@ -328,38 +433,51 @@ export class ReturnsFinanceRepository {
         ),
       0n,
     );
+    if (journals.length === 0) {
+      throw new ConflictException('No unsettled journals exist for this period');
+    }
     const fees = gross > 0n ? (gross * 3n) / 100n : 0n;
     const net = gross - fees - BigInt(input.reserveMinor) + BigInt(input.adjustmentMinor);
-    return this.db.settlement.create({
-      data: {
-        id: randomUUID(),
-        tenantId: context.tenantId,
-        partnerKind: input.partnerKind,
-        partnerId: input.partnerId,
-        periodStart: start,
-        periodEnd: end,
-        currency: input.currency.toUpperCase(),
-        grossMinor: gross,
-        feesMinor: fees,
-        reserveMinor: input.reserveMinor,
-        adjustmentMinor: input.adjustmentMinor,
-        netMinor: net,
-        lines: {
-          create: journals.map((journal) => ({
-            id: randomUUID(),
-            tenantId: context.tenantId,
-            journalEntryId: journal.id,
-            kind: journal.sourceType,
-            amountMinor: journal.lines.reduce(
-              (sum, line) =>
-                sum + (line.account.code === '2000' ? line.creditMinor - line.debitMinor : 0n),
-              0n,
-            ),
-          })),
+    if (net < 0n) {
+      throw new ConflictException('Settlement net amount cannot be negative');
+    }
+    try {
+      return await this.db.settlement.create({
+        data: {
+          id: randomUUID(),
+          tenantId: context.tenantId,
+          partnerKind: input.partnerKind,
+          partnerId: input.partnerId,
+          periodStart: start,
+          periodEnd: end,
+          currency: input.currency.toUpperCase(),
+          grossMinor: gross,
+          feesMinor: fees,
+          reserveMinor: input.reserveMinor,
+          adjustmentMinor: input.adjustmentMinor,
+          netMinor: net,
+          lines: {
+            create: journals.map((journal) => ({
+              id: randomUUID(),
+              tenantId: context.tenantId,
+              journalEntryId: journal.id,
+              kind: journal.sourceType,
+              amountMinor: journal.lines.reduce(
+                (sum, line) =>
+                  sum + (line.account.code === '2000' ? line.creditMinor - line.debitMinor : 0n),
+                0n,
+              ),
+            })),
+          },
         },
-      },
-      include: { lines: true },
-    });
+        include: { lines: true },
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException('One or more journals were already settled');
+      }
+      throw error;
+    }
   }
 
   async approveSettlement(
@@ -383,6 +501,11 @@ export class ReturnsFinanceRepository {
   }
 
   async paySettlement(context: TenantContext, settlementId: string): Promise<unknown> {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ServiceUnavailableException(
+        'A production settlement-payout provider must be configured before marking payouts paid',
+      );
+    }
     const settlement = await this.db.settlement.findFirst({
       where: { id: settlementId, tenantId: context.tenantId, status: 'APPROVED' },
     });
@@ -484,5 +607,40 @@ export class ReturnsFinanceRepository {
     });
     if (!record) throw new NotFoundException('Resource not found');
     return record;
+  }
+
+  private assertReturnReplay(
+    record: {
+      orderId: string;
+      customerId: string;
+      reasonCode: string;
+      requestedOutcome: string;
+      lines: Array<{ orderLineId: string; quantity: number }>;
+    },
+    customerId: string,
+    input: CreateReturnDto,
+  ) {
+    const sameLines =
+      record.lines.length === input.lines.length &&
+      input.lines.every((requested) =>
+        record.lines.some(
+          (line) =>
+            line.orderLineId === requested.orderLineId && line.quantity === requested.quantity,
+        ),
+      );
+    if (
+      record.orderId !== input.orderId ||
+      record.customerId !== customerId ||
+      record.reasonCode !== input.reasonCode ||
+      record.requestedOutcome !== input.requestedOutcome ||
+      !sameLines
+    ) {
+      throw new ConflictException('Idempotency-Key was already used for another return request');
+    }
+    return record;
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
   }
 }

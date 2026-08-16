@@ -23,6 +23,9 @@ describe('HealthController', () => {
       { ping: vi.fn().mockRejectedValue(new Error('offline')) } as unknown as Redis,
     );
 
-    await expect(controller.ready()).rejects.toThrow('offline');
+    await expect(controller.ready()).rejects.toMatchObject({
+      message: 'Required dependencies are unavailable',
+      status: 503,
+    });
   });
 });

@@ -137,6 +137,26 @@ export const environmentSchema = baseEnvironmentSchema.superRefine((environment,
     }
   }
 
+  try {
+    const publicBaseUrl = new URL(environment.PUBLIC_BASE_URL);
+    if (
+      !['http:', 'https:'].includes(publicBaseUrl.protocol) ||
+      publicBaseUrl.username ||
+      publicBaseUrl.password ||
+      publicBaseUrl.pathname !== '/' ||
+      publicBaseUrl.search ||
+      publicBaseUrl.hash
+    ) {
+      throw new Error('invalid public origin');
+    }
+  } catch {
+    issue.addIssue({
+      code: 'custom',
+      path: ['PUBLIC_BASE_URL'],
+      message: 'must be an HTTP origin without a path, query, fragment, or credentials',
+    });
+  }
+
   if (environment.NODE_ENV !== 'production') return;
 
   for (const key of [

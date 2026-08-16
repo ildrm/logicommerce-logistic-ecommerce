@@ -331,10 +331,20 @@ assert.equal(reopenedInvoice.schedules[0].status, 'PARTIALLY_PAID');
 const creditNote = await json(
   await api(`/billing/operations/invoices/${accepted.invoice.id}/credit-notes`, admin, {
     method: 'POST',
+    headers: { 'idempotency-key': `phase12-credit-${accepted.invoice.id}` },
     body: JSON.stringify({ amountMinor: 10_000, reason: 'Live refund credit note' }),
   }),
   201,
 );
+const creditReplay = await json(
+  await api(`/billing/operations/invoices/${accepted.invoice.id}/credit-notes`, admin, {
+    method: 'POST',
+    headers: { 'idempotency-key': `phase12-credit-${accepted.invoice.id}` },
+    body: JSON.stringify({ amountMinor: 10_000, reason: 'Live refund credit note' }),
+  }),
+  201,
+);
+assert.equal(creditReplay.id, creditNote.id);
 const settledInvoice = await json(
   await api(`/billing/invoices/${accepted.invoice.id}`, admin),
   200,

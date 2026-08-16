@@ -49,6 +49,7 @@ export class PaymentProviderService {
   }
 
   async refund(input: {
+    refundId: string;
     provider: string;
     providerReference: string;
     amountMinor: number;
@@ -68,13 +69,18 @@ export class PaymentProviderService {
         `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(input.providerReference)}`,
         { headers: { authorization: `Bearer ${key}` } },
       );
-      if (!sessionResponse.ok || !session.payment_intent) {
+      if (
+        !sessionResponse.ok ||
+        typeof session.payment_intent !== 'string' ||
+        !session.payment_intent
+      ) {
         throw new BadGatewayException('Stripe payment could not be resolved');
       }
       const form = new URLSearchParams({
         payment_intent: session.payment_intent,
         amount: String(input.amountMinor),
         reason: 'requested_by_customer',
+        'metadata[logicommerce_refund_id]': input.refundId,
       });
       const { response, body: result } = await this.requestJson<{
         id?: string;
@@ -88,7 +94,9 @@ export class PaymentProviderService {
         },
         body: form,
       });
-      if (!response.ok || !result.id) throw new BadGatewayException('Stripe refund failed');
+      if (!response.ok || typeof result.id !== 'string' || !result.id) {
+        throw new BadGatewayException('Stripe refund failed');
+      }
       return {
         reference: result.id,
         status: result.status === 'succeeded' ? 'COMPLETED' : 'PENDING',
@@ -113,7 +121,7 @@ export class PaymentProviderService {
         reason: input.reason,
       }),
     });
-    if (!response.ok || !result.refund?.id) {
+    if (!response.ok || typeof result.refund?.id !== 'string' || !result.refund.id) {
       throw new BadGatewayException('Coinbase refund failed');
     }
     return {
@@ -166,7 +174,14 @@ export class PaymentProviderService {
       },
       body: form,
     });
-    if (!response.ok || !result.id || !result.url) {
+    if (
+      !response.ok ||
+      typeof result.id !== 'string' ||
+      !result.id ||
+      !this.isHttpsUrl(result.url) ||
+      (result.expires_at !== undefined &&
+        (!Number.isSafeInteger(result.expires_at) || result.expires_at <= 0))
+    ) {
       throw new BadGatewayException('Stripe checkout session creation failed');
     }
     return {
@@ -205,7 +220,13 @@ export class PaymentProviderService {
         expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
       }),
     });
-    if (!response.ok || !result.id || !result.url) {
+    if (
+      !response.ok ||
+      typeof result.id !== 'string' ||
+      !result.id ||
+      !this.isHttpsUrl(result.url) ||
+      (result.expiresAt !== undefined && !this.isValidDate(result.expiresAt))
+    ) {
       throw new BadGatewayException('Coinbase checkout session creation failed');
     }
     return {
@@ -252,6 +273,19 @@ export class PaymentProviderService {
     bytes[8] = (bytes[8]! & 0x3f) | 0x80;
     const hex = bytes.toString('hex');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  private isHttpsUrl(value: unknown): value is string {
+    if (typeof value !== 'string') return false;
+    try {
+      return new URL(value).protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  private isValidDate(value: unknown): value is string {
+    return typeof value === 'string' && Number.isFinite(new Date(value).getTime());
   }
 
   private async requestJson<T>(url: string, init: RequestInit) {

@@ -122,6 +122,39 @@ describe('PaymentProviderService', () => {
     );
   });
 
+  it('rejects insecure hosted-checkout URLs returned by a provider', async () => {
+    configure({
+      PAYMENT_ADAPTER: 'coinbase',
+      COINBASE_API_KEY_ID: 'key-id',
+      COINBASE_API_KEY_SECRET: 'test-secret',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'checkout-test',
+            url: 'http://attacker.example/checkout',
+          }),
+          { status: 201, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+    const service = new PaymentProviderService();
+    Object.assign(service, { coinbaseJwt: () => 'test-jwt' });
+
+    await expect(
+      service.createSession({
+        provider: 'COINBASE',
+        idempotencyKey: 'customer-supplied-key',
+        amountMinor: 12_500,
+        currency: 'USD',
+        invoiceId: '00000000-0000-4000-8000-000000000001',
+        invoiceNumber: 'INV-2026-000001',
+      }),
+    ).rejects.toThrow('checkout session creation failed');
+  });
+
   it('calls the singular Coinbase refund endpoint and reads the nested refund result', async () => {
     configure({
       PAYMENT_ADAPTER: 'coinbase',
@@ -139,6 +172,7 @@ describe('PaymentProviderService', () => {
     Object.assign(service, { coinbaseJwt: () => 'test-jwt' });
 
     const result = await service.refund({
+      refundId: '00000000-0000-4000-8000-000000000010',
       provider: 'COINBASE',
       providerReference: '68f7a946db0529ea9b6d3a12',
       amountMinor: 2_500,
@@ -150,5 +184,39 @@ describe('PaymentProviderService', () => {
       'https://business.coinbase.com/api/v1/checkouts/68f7a946db0529ea9b6d3a12/refund',
     );
     expect(result).toEqual({ reference: 'refund-1', status: 'PENDING' });
+  });
+
+  it('binds Stripe refunds to the local durable refund identity', async () => {
+    configure({ PAYMENT_ADAPTER: 'stripe', STRIPE_SECRET_KEY: 'stripe-test-secret' });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ payment_intent: 'pi_test' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 're_test', status: 'pending' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await new PaymentProviderService().refund({
+      refundId: '00000000-0000-4000-8000-000000000010',
+      provider: 'STRIPE',
+      providerReference: 'cs_test',
+      amountMinor: 2_500,
+      reason: 'Customer request',
+      idempotencyKey: 'refund-request-key',
+    });
+
+    const request = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    const body = request.body as URLSearchParams;
+    expect(body.get('metadata[logicommerce_refund_id]')).toBe(
+      '00000000-0000-4000-8000-000000000010',
+    );
   });
 });

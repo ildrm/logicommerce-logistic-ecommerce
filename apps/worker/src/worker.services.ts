@@ -7,6 +7,7 @@ import type { DatabaseClient } from '@logicommerce/database';
 import { parseEnvironment } from '@logicommerce/config';
 import { createLogger } from '@logicommerce/observability';
 import { Queue } from 'bullmq';
+import { Redis } from 'ioredis';
 
 const logger = createLogger('worker');
 export const DATABASE = Symbol('DATABASE');
@@ -404,11 +405,44 @@ export class TransportOperationsSweeper implements OnModuleInit, OnApplicationSh
 
 @Injectable()
 export class WorkerHealth implements OnModuleInit, OnApplicationShutdown {
+  private readonly redis: Redis;
+  private timer: NodeJS.Timeout | undefined;
+  private running = false;
+
+  constructor(@Inject(DATABASE) private readonly database: DatabaseClient) {
+    const environment = parseEnvironment(process.env);
+    this.redis = new Redis(environment.REDIS_URL, {
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    });
+    this.redis.on('error', (error: unknown) => {
+      logger.error({ err: error }, 'Worker health Redis connection failed');
+    });
+  }
+
   async onModuleInit() {
-    await writeFile(HEALTH_FILE, new Date().toISOString(), { mode: 0o600 });
+    await unlink(HEALTH_FILE).catch(() => undefined);
+    this.timer = setInterval(() => void this.probe(), 5_000);
+    await this.probe();
   }
 
   async onApplicationShutdown() {
+    if (this.timer) clearInterval(this.timer);
+    this.redis.disconnect();
     await unlink(HEALTH_FILE).catch(() => undefined);
+  }
+
+  private async probe() {
+    if (this.running) return;
+    this.running = true;
+    try {
+      await Promise.all([this.database.$queryRaw`SELECT 1`, this.redis.ping()]);
+      await writeFile(HEALTH_FILE, new Date().toISOString(), { mode: 0o600 });
+    } catch (error) {
+      await unlink(HEALTH_FILE).catch(() => undefined);
+      logger.error({ err: error }, 'Worker dependencies are unavailable');
+    } finally {
+      this.running = false;
+    }
   }
 }
