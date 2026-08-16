@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "release": "v0.1.0-rc.1",
+  "release": "v0.1.0-rc.2",
   "gates": {
     "providerSandboxCertification": {
       "status": "pending",
