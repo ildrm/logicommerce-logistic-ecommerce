@@ -2,9 +2,10 @@ import { expect, test } from '@playwright/test';
 
 async function signIn(page: import('@playwright/test').Page) {
   await page.goto('/account');
-  await page.getByLabel('Email', { exact: true }).first().fill('admin@demo.logicommerce.local');
-  await page.getByLabel('Password', { exact: true }).fill('ChangeMe-Local-Only-2026');
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  const signInForm = page.getByRole('form', { name: 'Sign in' });
+  await signInForm.getByLabel('Email', { exact: true }).fill('admin@demo.logicommerce.local');
+  await signInForm.getByLabel('Password', { exact: true }).fill('ChangeMe-Local-Only-2026');
+  await signInForm.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Open dashboard' })).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => window.sessionStorage.getItem('logicommerce_access')))
@@ -30,9 +31,10 @@ test('tenant administrator can sign in and reach identity controls', async ({ pa
   await expect(page.getByRole('heading', { name: 'Secure sign in.' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Reset access' })).toBeVisible();
 
-  await page.getByLabel('Email', { exact: true }).first().fill('admin@demo.logicommerce.local');
-  await page.getByLabel('Password', { exact: true }).fill('ChangeMe-Local-Only-2026');
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  const signInForm = page.getByRole('form', { name: 'Sign in' });
+  await signInForm.getByLabel('Email', { exact: true }).fill('admin@demo.logicommerce.local');
+  await signInForm.getByLabel('Password', { exact: true }).fill('ChangeMe-Local-Only-2026');
+  await signInForm.getByRole('button', { name: 'Sign in', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: 'Identity & access' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Active sessions' })).toBeVisible();
